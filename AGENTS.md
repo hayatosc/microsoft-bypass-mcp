@@ -34,6 +34,7 @@ src/
   index.ts                 # Worker entry (export default app)
   app.ts                   # Hono app: GET / info + /mcp (stateless MCP handler)
   lib/env.ts               # Bindings + validated env access (fail fast)
+  lib/access-auth.ts       # Cloudflare Access JWT validation middleware
   lib/power-automate.ts    # stateless Power Automate client
   features/outlook/
     server.ts              # createOutlookMcpServer factory (3 mail tools)
@@ -48,15 +49,18 @@ src/
   proxy tool (`{ url, method, body }` passthrough).
 - **No persistence.** Never store mail data (no DB/KV/R2/cache). Mail data must
   not outlive a request.
-- **Logging hygiene.** Never log the Power Automate URL or mail bodies; only log
-  `operation` + `requestId`.
-- **Auth** is delegated to Cloudflare Access (OAuth) in front of the Worker. Do
-  not add app-level auth back.
-- `POWER_AUTOMATE_URL` lives in `.dev.vars` (gitignored); never commit it.
+- **Logging hygiene.** Never log the Power Automate URL, mail bodies, queries,
+  subjects, or message IDs; the client emits one structured log entry per call
+  with only `type` + `requestId` + `operation` + `durationMs` + `status` + `success`.
+- **Auth** is Cloudflare Access (OAuth) in front of the Worker, plus in-Worker
+  validation of the Access JWT (`Cf-Access-Jwt-Assertion`). Keep both; do not add
+  app-level auth back.
+- `POWER_AUTOMATE_URL`, `TEAM_DOMAIN`, and `POLICY_AUD` live in `.dev.vars`
+  (gitignored); never commit them.
 
 ## Conventions
 
 - TypeScript ESM-first: `strict`, `verbatimModuleSyntax`, no `any` / unsafe `as`.
-- zod v4 for validation. MCP SDK `McpServer` +
-  `WebStandardStreamableHTTPServerTransport` (fresh server per request).
+- zod v4 for validation. MCP SDK v2 (`@modelcontextprotocol/server`):
+  `McpServer` + `registerTool` behind `createMcpHandler` (fresh server per request).
 - Docs and code comments in English.

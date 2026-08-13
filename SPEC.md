@@ -65,36 +65,25 @@ The MCP server is exposed as a **Streamable HTTP** endpoint at `/mcp`, served by
 a [Hono](https://hono.dev) app on Cloudflare Workers.
 
 It follows the **stateless server factory** pattern from the official MCP
-TypeScript SDK: a fresh `McpServer` is created from a factory for **every
+TypeScript SDK (v2): a fresh `McpServer` is created from a factory for **every
 request**. No state survives between requests.
 
 ```ts
-export function createOutlookMcpServer() {
-  const server = new McpServer({
-    name: 'university-m365',
-    version: '0.1.0',
-  })
-  registerListMessagesTool(server)
-  registerSearchMessagesTool(server)
-  registerGetMessageTool(server)
+export function createOutlookMcpServer(client: PowerAutomateClient): McpServer {
+  const server = new McpServer({ name: 'university-m365', version: '0.1.0' })
+  // ...server.registerTool(...) x3...
   return server
 }
 ```
 
-Per request, the `/mcp` handler:
+Per request, the `/mcp` handler wraps the factory in a `createMcpHandler()`
+entry and delegates via `handler.fetch(request)`. The factory runs once per
+request, so each request gets a fresh server; the handler serves the modern
+2026-07-28 protocol revision and, via the legacy stateless fallback, 2025-era
+traffic.
 
-1. creates a `WebStandardStreamableHTTPServerTransport`,
-2. creates a fresh `McpServer` via the factory,
-3. `connect`s the server to the transport,
-4. delegates the incoming request via `transport.handleRequest(request)`.
-
-The Power Automate client itself is **stateless** and may be shared at module
-scope.
-
-> Note: the official SDK does not ship a `createMcpHandler()` helper. The
-> stateless pattern above (`McpServer` factory + `WebStandardStreamableHTTPServerTransport`
-> + `transport.handleRequest`) is the canonical SDK v1 way to express it and is
-> what this spec means by "fresh server per request".
+The Power Automate client itself is **stateless** and is constructed per request
+from the environment-derived base URL.
 
 ## 5. Endpoints and authentication
 
@@ -103,18 +92,32 @@ scope.
 | GET    | `/`   | Human-readable info page (server name, tools). |
 | ALL    | `/mcp`| MCP Streamable HTTP endpoint.                  |
 
-The `/mcp` endpoint performs no authentication itself. Access control is
-enforced by **Cloudflare Access** (OAuth) placed in front of the Worker, so
-only clients that pass the Access policy reach `/mcp`.
+The `/mcp` endpoint is protected in two layers:
+
+1. **Cloudflare Access** (OAuth) sits in front of the Worker, so only clients
+   admitted by the Access policy reach `/mcp`.
+2. The Worker additionally validates the Access JWT carried on the
+   `Cf-Access-Jwt-Assertion` header (via `TEAM_DOMAIN` + `POLICY_AUD`), as
+   defense in depth against requests that reach the Worker without passing
+   Access.
+
+Direct `*.workers.dev` and preview URLs are disabled (`workers_dev: false`,
+`preview_urls: false`) so the Worker is reachable only through the
+Access-protected custom domain. When `TEAM_DOMAIN`/`POLICY_AUD` are unset
+(local development), JWT validation is skipped because no Access fronts the
+Worker.
 
 ## 6. Environment
 
-| Variable            | Required | Purpose                                     |
-|---------------------|----------|---------------------------------------------|
-| `POWER_AUTOMATE_URL`| yes      | Power Automate HTTP-trigger URL.            |
+| Variable            | Required | Purpose                                                     |
+|---------------------|----------|-------------------------------------------------------------|
+| `POWER_AUTOMATE_URL`| yes      | Power Automate HTTP-trigger URL.                            |
+| `TEAM_DOMAIN`       | prod     | Cloudflare Access team domain (`https://<team>…access.com`). |
+| `POLICY_AUD`        | prod     | Cloudflare Access Application Audience (AUD) tag.           |
 
 Missing required variables fail fast at startup/request time (no silent
-defaults).
+defaults). `TEAM_DOMAIN` and `POLICY_AUD` must be set together; a partially
+configured pair fails fast.
 
 ## 7. Power Automate protocol
 
@@ -157,6 +160,9 @@ The flow wraps the Graph response in an envelope:
 }
 ```
 
+The MCP server validates that `requestId` and `operation` echo the request; a
+mismatch is surfaced as a tool error.
+
 `data` depends on the operation:
 
 - `list_messages`, `search_messages` -> Graph list response
@@ -198,18 +204,18 @@ return {
 
 ### `outlook_list_messages`
 
-List the most recent mailbox messages (metadata only).
+List the most recent inbox messages (metadata only).
 
-- Input: `{ limit?: number }` — default `5`, range `1..100`.
-- Output: `{ messages: MessageSummary[] }`
+- Input: `{ limit?: number }` — default `5`, range `1..50`.
+- Output: `{ messages: MessageSummary[], hasMore: boolean }`
 
 ### `outlook_search_messages`
 
-Search messages by a free-text query.
+Search inbox messages by a free-text query.
 
 - Input: `{ query: string, limit?: number }` — `query` required (non-empty),
-  `limit` default `10`, range `1..100`.
-- Output: `{ messages: MessageSummary[] }`
+  `limit` default `10`, range `1..50`.
+- Output: `{ messages: MessageSummary[], hasMore: boolean }`
 
 ### `outlook_get_message`
 
@@ -264,9 +270,9 @@ Mail data must not outlive the request that produced it.
 ### Logging hygiene
 
 - The Power Automate URL must never appear in responses or logs.
-- Mail bodies must never be logged.
-- Only `requestId`, operation name, and error class/message (without body/URL)
-  may be logged.
+- Mail bodies, queries, subjects, and message IDs must never be logged.
+- Power Automate calls emit one structured log entry per call containing only
+  `type`, `requestId`, `operation`, `durationMs`, `status`, and `success`.
 
 ### Timeout
 
@@ -291,7 +297,8 @@ Automate — must **never** be built.
 
 - Runtime: Cloudflare Workers (`wrangler`)
 - Web framework: Hono
-- MCP: `@modelcontextprotocol/sdk`
+- MCP: `@modelcontextprotocol/server` (v2)
+- JWT validation: `jose`
 - Validation/schemas: Zod v4
 - Package manager: bun
 - Language: TypeScript (ESM-first, `strict`)
