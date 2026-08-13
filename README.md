@@ -5,11 +5,74 @@ exposes a fixed surface of three tools for reading a university Outlook mailbox
 via a Power Automate HTTP-trigger intermediary. See [SPEC.md](./SPEC.md) for the
 full specification.
 
-## Tools
+## Specification
 
-- `outlook_list_messages` — list the most recent messages (metadata only)
-- `outlook_search_messages` — search messages by free-text query (metadata only)
-- `outlook_get_message` — fetch a full message (including body) by ID
+### Architecture
+
+```
+MCP Client
+    ↓  MCP over Streamable HTTP (/mcp)
+Remote MCP Server — Cloudflare Workers + Hono (this repo)
+    ↓  HTTP POST { operation, requestId, args }
+Power Automate — operation allowlist → fixed Graph endpoints, M365 auth
+    ↓
+Microsoft Graph — Outlook mailbox
+```
+
+- **Read-only.** Exactly three tools, three operations, fixed Graph endpoints.
+  The server never authenticates to Graph and never calls Graph directly.
+- **Stateless.** A fresh `McpServer` is created per request.
+- **Auth** for `/mcp` is delegated to Cloudflare Access (OAuth) in front of the
+  Worker; this app performs no auth itself.
+
+### Tools
+
+| Tool | Input | Output |
+| --- | --- | --- |
+| `outlook_list_messages` | `{ limit?: number }` (default 5, 1–100) | `{ messages: MessageSummary[] }` |
+| `outlook_search_messages` | `{ query: string, limit?: number }` (default 10, 1–100) | `{ messages: MessageSummary[] }` |
+| `outlook_get_message` | `{ messageId: string }` | `MessageDetail` |
+
+### Power Automate protocol
+
+Request (POST JSON):
+
+```jsonc
+{ "operation": "list_messages | search_messages | get_message", "requestId": "<uuid>", "args": { ... } }
+```
+
+- `list_messages` → `args: { top }`
+- `search_messages` → `args: { query, top }`
+- `get_message` → `args: { messageId }`
+
+Response (2xx):
+
+```jsonc
+{ "ok": true, "requestId": "<uuid>", "operation": "...", "data": { /* Graph response */ } }
+```
+
+The server normalizes `data` into the tool output schemas below.
+
+### Message shapes
+
+```ts
+type Recipient = { name: string; address: string }
+
+type MessageSummary = {
+  id: string; subject: string; from: Recipient
+  receivedDateTime: string; hasAttachments: boolean
+  importance: 'low' | 'normal' | 'high'; isRead: boolean
+  bodyPreview: string
+}
+
+type MessageDetail = {
+  id: string; subject: string; from: Recipient
+  to: Recipient[]; cc: Recipient[]
+  receivedDateTime: string; hasAttachments: boolean
+  importance: 'low' | 'normal' | 'high'; isRead: boolean
+  body: { contentType: 'text' | 'html'; content: string }
+}
+```
 
 ## Requirements
 
