@@ -1,16 +1,21 @@
-# University Outlook Read-only MCP — Specification
+# University Microsoft 365 Read-only MCP — Specification
 
 ## 1. Overview
 
 A read-only [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server
-that lets an LLM read a university Outlook mailbox (Microsoft 365 / Microsoft
-Graph) through a Power Automate HTTP-trigger intermediary.
+that lets an LLM read university Microsoft 365 resources (Microsoft Graph)
+through a Power Automate HTTP-trigger intermediary.
 
 The server is **not** a "Microsoft Graph MCP". It is a
-**"University Outlook Read-only MCP"**: a fixed, allow-listed surface of exactly
-three read tools that map onto exactly three operations, which Power Automate
-turns into fixed Microsoft Graph calls. The server never authenticates to Graph
-and never talks to Graph directly.
+**"University Microsoft 365 Read-only MCP"**: a fixed, allow-listed surface of
+read tools that map onto fixed operations, which Power Automate turns into
+fixed Microsoft Graph calls. The server never authenticates to Graph and never
+talks to Graph directly.
+
+The current implementation covers the Outlook mailbox with exactly three tools
+(§8). Other Microsoft 365 apps (Teams, OneDrive, SharePoint, etc.) are added as
+new features, each following the same pattern: fixed tools -> fixed operations
+-> fixed Graph endpoints.
 
 ## 2. Why Power Automate is in the path
 
@@ -45,13 +50,13 @@ Power Automate (external, not in this repo)
     Microsoft 365 authentication
 
 Microsoft Graph
-    Outlook mailbox access
+    Outlook mailbox access (currently the only implemented feature)
 ```
 
 The boundary is fixed and must not blur:
 
 ```
-MCP -> 3 fixed tools -> 3 fixed operations -> Power Automate -> fixed Graph APIs
+MCP -> fixed tools -> fixed operations -> Power Automate -> fixed Graph APIs
 ```
 
 ## 4. Transport and server lifecycle
@@ -66,7 +71,7 @@ request**. No state survives between requests.
 ```ts
 export function createOutlookMcpServer() {
   const server = new McpServer({
-    name: 'university-outlook',
+    name: 'university-m365',
     version: '0.1.0',
   })
   registerListMessagesTool(server)
@@ -274,6 +279,7 @@ Power Automate calls carry an explicit timeout (abort signal); the default is
 send_message, create_draft, delete_message, move_message,
 mark_as_read, mark_as_unread, attachments, pagination,
 mail-folder selection, sent items, calendar, contacts,
+other Microsoft 365 apps (Teams, OneDrive, SharePoint, etc.),
 arbitrary Graph API proxy
 ```
 
@@ -351,6 +357,7 @@ returns the full message body.
 
 ## 14. Design principles
 
-This server is "University Outlook Read-only MCP", not "Microsoft Graph MCP".
-Keep the layer boundary intact: fixed tools -> fixed operations -> fixed Graph
-APIs. Prefer the smallest version that works end-to-end and grow from there.
+This server is "University Microsoft 365 Read-only MCP", not "Microsoft Graph
+MCP". Keep the layer boundary intact: fixed tools -> fixed operations -> fixed
+Graph APIs. Prefer the smallest version that works end-to-end and grow from
+there.

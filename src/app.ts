@@ -15,7 +15,7 @@ const app = new Hono<{ Bindings: Bindings }>()
 
 app.get('/', (c) =>
   c.json({
-    name: 'university-outlook',
+    name: 'university-m365',
     version: '0.1.0',
     tools: TOOL_NAMES,
   }),

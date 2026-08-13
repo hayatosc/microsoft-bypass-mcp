@@ -1,9 +1,11 @@
-# University Outlook Read-only MCP
+# University Microsoft 365 Read-only MCP
 
 A read-only [Model Context Protocol](https://modelcontextprotocol.io) server that
-exposes a fixed surface of three tools for reading a university Outlook mailbox
-via a Power Automate HTTP-trigger intermediary. See [SPEC.md](./SPEC.md) for the
-full specification.
+exposes a fixed surface of read tools for university Microsoft 365 resources via
+a Power Automate HTTP-trigger intermediary. The current implementation covers
+the Outlook mailbox (three tools); other Microsoft 365 apps (Teams, OneDrive,
+etc.) are added as new features. See [SPEC.md](./SPEC.md) for the full
+specification.
 
 ## Specification
 
@@ -19,8 +21,9 @@ Power Automate — operation allowlist → fixed Graph endpoints, M365 auth
 Microsoft Graph — Outlook mailbox
 ```
 
-- **Read-only.** Exactly three tools, three operations, fixed Graph endpoints.
-  The server never authenticates to Graph and never calls Graph directly.
+- **Read-only.** Exactly three Outlook tools, three operations, fixed Graph
+  endpoints. The server never authenticates to Graph and never calls Graph
+  directly.
 - **Stateless.** A fresh `McpServer` is created per request.
 - **Auth** for `/mcp` is delegated to Cloudflare Access (OAuth) in front of the
   Worker; this app performs no auth itself.

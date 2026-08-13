@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "office365-bypass-mcp",
+      "name": "microsoft-bypass-mcp",
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.30.0",
         "hono": "^4.13.1",

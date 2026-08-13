@@ -2,9 +2,11 @@
 
 ## Project
 
-University Outlook Read-only MCP — a read-only [Model Context Protocol](https://modelcontextprotocol.io)
-server (Cloudflare Workers + Hono) exposing three tools that read a university
-Outlook mailbox through a Power Automate HTTP-trigger intermediary. See
+University Microsoft 365 Read-only MCP — a read-only [Model Context Protocol](https://modelcontextprotocol.io)
+server (Cloudflare Workers + Hono) exposing read tools for university Microsoft
+365 resources through a Power Automate HTTP-trigger intermediary. The current
+implementation covers the Outlook mailbox (three tools); other Microsoft 365
+apps (Teams, OneDrive, etc.) are added as new features. See
 [`SPEC.md`](./SPEC.md) for the authoritative specification and
 [`README.md`](./README.md) for a summary.
 
@@ -34,7 +36,7 @@ src/
   lib/env.ts               # Bindings + validated env access (fail fast)
   lib/power-automate.ts    # stateless Power Automate client
   features/outlook/
-    server.ts              # createOutlookMcpServer factory (3 tools)
+    server.ts              # createOutlookMcpServer factory (3 mail tools)
     schema.ts              # zod schemas (tool I/O + message shapes)
     normalize.ts           # Graph response -> normalized shapes
 ```

@@ -1,5 +1,7 @@
 /**
- * MCP server factory exposing the three fixed Outlook read-only tools.
+ * MCP server factory exposing the fixed Outlook mail read-only tools.
+ * The server itself is Microsoft 365-wide: future features (Teams, OneDrive,
+ * etc.) register alongside the Outlook tools.
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 
@@ -26,7 +28,7 @@ export const TOOL_NAMES = [
  * its output schema.
  */
 export function createOutlookMcpServer(client: PowerAutomateClient): McpServer {
-  const server = new McpServer({ name: 'university-outlook', version: '0.1.0' })
+  const server = new McpServer({ name: 'university-m365', version: '0.1.0' })
 
   server.registerTool(
     'outlook_list_messages',

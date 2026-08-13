@@ -1,5 +1,5 @@
 {
-  "name": "office365-bypass-mcp",
+  "name": "microsoft-bypass-mcp",
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
