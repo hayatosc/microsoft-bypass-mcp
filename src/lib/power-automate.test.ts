@@ -15,16 +15,25 @@ const requestSchema = z.object({
 
 type RequestRecord = { url: string; body: unknown }
 
-function mockFetch(respond: () => Response): { records: RequestRecord[]; fetchFn: typeof fetch } {
+function mockFetch(respond: (record: RequestRecord) => Response): {
+  records: RequestRecord[]
+  fetchFn: typeof fetch
+} {
   const records: RequestRecord[] = []
   const fetchFn: typeof fetch = async (input, init) => {
-    records.push({
+    const record = {
       url: typeof input === 'string' ? input : input instanceof URL ? input.href : input.url,
       body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined,
-    })
-    return respond()
+    }
+    records.push(record)
+    return respond(record)
   }
   return { records, fetchFn }
+}
+
+function successResponse(record: RequestRecord, data: unknown): Response {
+  const { operation, requestId } = requestSchema.parse(record.body)
+  return new Response(JSON.stringify({ ok: true, requestId, operation, data }), { status: 200 })
 }
 
 describe('PowerAutomateClient', () => {
@@ -34,9 +43,7 @@ describe('PowerAutomateClient', () => {
       { operation: 'search_messages' as const, args: { query: 'PMDA', top: 10 } },
       { operation: 'get_message' as const, args: { messageId: 'msg-1' } },
     ]
-    const { records, fetchFn } = mockFetch(
-      () => new Response(JSON.stringify({ ok: true, data: { value: [] } }), { status: 200 }),
-    )
+    const { records, fetchFn } = mockFetch((record) => successResponse(record, { value: [] }))
     const client = new PowerAutomateClient({ baseUrl: 'https://example.test/flow', fetchFn })
 
     for (const { operation, args } of cases) {
@@ -59,9 +66,7 @@ describe('PowerAutomateClient', () => {
   })
 
   it('generates a fresh requestId per call', async () => {
-    const { records, fetchFn } = mockFetch(
-      () => new Response(JSON.stringify({ ok: true, data: { value: [] } }), { status: 200 }),
-    )
+    const { records, fetchFn } = mockFetch((record) => successResponse(record, { value: [] }))
     const client = new PowerAutomateClient({ baseUrl: 'https://example.test/flow', fetchFn })
 
     await client.call('list_messages', { top: 5 })
@@ -73,9 +78,7 @@ describe('PowerAutomateClient', () => {
 
   it('parses the response JSON and unwraps the envelope', async () => {
     const data = { value: [{ id: 'msg-1' }] }
-    const { fetchFn } = mockFetch(
-      () => new Response(JSON.stringify({ ok: true, data }), { status: 200 }),
-    )
+    const { fetchFn } = mockFetch((record) => successResponse(record, data))
     const client = new PowerAutomateClient({ baseUrl: 'https://example.test/flow', fetchFn })
 
     await expect(client.call('get_message', { messageId: 'msg-1' })).resolves.toEqual(data)
@@ -89,6 +92,41 @@ describe('PowerAutomateClient', () => {
 
     await expect(client.call('list_messages', { top: 5 })).rejects.toThrow(
       'list_messages returned an unexpected response',
+    )
+  })
+
+  it('throws when the response echoes a different requestId', async () => {
+    const { fetchFn } = mockFetch((record) => {
+      const { operation } = requestSchema.parse(record.body)
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          requestId: crypto.randomUUID(),
+          operation,
+          data: { value: [] },
+        }),
+        { status: 200 },
+      )
+    })
+    const client = new PowerAutomateClient({ baseUrl: 'https://example.test/flow', fetchFn })
+
+    await expect(client.call('list_messages', { top: 5 })).rejects.toThrow(
+      'list_messages response requestId does not match',
+    )
+  })
+
+  it('throws when the response echoes a different operation', async () => {
+    const { fetchFn } = mockFetch((record) => {
+      const { requestId } = requestSchema.parse(record.body)
+      return new Response(
+        JSON.stringify({ ok: true, requestId, operation: 'get_message', data: { value: [] } }),
+        { status: 200 },
+      )
+    })
+    const client = new PowerAutomateClient({ baseUrl: 'https://example.test/flow', fetchFn })
+
+    await expect(client.call('list_messages', { top: 5 })).rejects.toThrow(
+      'list_messages response operation does not match',
     )
   })
 
@@ -112,33 +150,48 @@ describe('PowerAutomateClient', () => {
     }
   })
 
-  it('logs only the operation and requestId, never the URL or body', async () => {
+  it('logs a structured entry without leaking the URL or body', async () => {
     const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
     try {
-      const { fetchFn } = mockFetch(
-        () =>
-          new Response(JSON.stringify({ ok: true, data: { value: [{ id: 'secret-body' }] } }), {
-            status: 200,
-          }),
+      const { fetchFn } = mockFetch((record) =>
+        successResponse(record, { value: [{ id: 'secret-body' }] }),
       )
       const client = new PowerAutomateClient({ baseUrl: 'https://example.test/flow', fetchFn })
 
       await client.call('list_messages', { top: 5 })
 
       expect(spy).toHaveBeenCalledTimes(1)
-      const logged = spy.mock.calls.map((args) => args.join(' ')).join('\n')
-      expect(logged).toContain('operation=list_messages')
-      expect(logged).toContain('requestId=')
-      expect(logged).not.toContain('https://example.test')
-      expect(logged).not.toContain('secret-body')
+      const logged = JSON.parse(spy.mock.calls[0]?.[0] ?? '{}')
+      expect(logged.type).toBe('power_automate_request')
+      expect(logged.operation).toBe('list_messages')
+      expect(logged.requestId).toBeTruthy()
+      expect(logged.success).toBe(true)
+      const raw = spy.mock.calls.map((args) => args.join(' ')).join('\n')
+      expect(raw).not.toContain('https://example.test')
+      expect(raw).not.toContain('secret-body')
     } finally {
       spy.mockRestore()
     }
   })
 
+  it('links each operation to its args at the type level', async () => {
+    const { fetchFn } = mockFetch((record) => successResponse(record, { value: [] }))
+    const client = new PowerAutomateClient({ baseUrl: 'https://example.test/flow', fetchFn })
+
+    const wrong = async (): Promise<void> => {
+      // @ts-expect-error — get_message takes { messageId }, not { top }
+      await client.call('get_message', { top: 20 })
+    }
+    await wrong()
+  })
+
   it('invokes the global fetch correctly when no fetchFn is injected', async () => {
-    const globalFetch = vi.fn<typeof fetch>(async () => {
-      return new Response(JSON.stringify({ ok: true, data: { value: [] } }), { status: 200 })
+    const globalFetch = vi.fn<typeof fetch>(async (input, init) => {
+      const body = JSON.parse(typeof init?.body === 'string' ? init.body : '{}')
+      const { operation, requestId } = requestSchema.parse(body)
+      return new Response(JSON.stringify({ ok: true, requestId, operation, data: { value: [] } }), {
+        status: 200,
+      })
     })
     vi.stubGlobal('fetch', globalFetch)
     const client = new PowerAutomateClient({ baseUrl: 'https://example.test/flow' })

@@ -23,7 +23,7 @@ const graphMessageSummarySchema = z.object({
   id: z.string(),
   subject: z.string(),
   from: graphRecipientSchema,
-  receivedDateTime: z.string(),
+  receivedDateTime: z.iso.datetime(),
   hasAttachments: z.boolean(),
   importance: z.enum(['low', 'normal', 'high']),
   isRead: z.boolean(),
@@ -39,7 +39,7 @@ const graphMessageDetailSchema = z.object({
   from: graphRecipientSchema,
   toRecipients: z.array(graphRecipientSchema),
   ccRecipients: z.array(graphRecipientSchema),
-  receivedDateTime: z.string(),
+  receivedDateTime: z.iso.datetime(),
   hasAttachments: z.boolean(),
   importance: z.enum(['low', 'normal', 'high']),
   isRead: z.boolean(),
@@ -51,6 +51,7 @@ const graphMessageDetailSchema = z.object({
 
 const graphMessageListSchema = z.object({
   value: z.array(graphMessageSummarySchema),
+  '@odata.nextLink': z.string().optional(),
 })
 
 type GraphRecipient = z.infer<typeof graphRecipientSchema>
@@ -92,13 +93,22 @@ function toDetail(message: GraphMessageDetail): MessageDetail {
   }
 }
 
-/** Normalizes a Graph list response ({ value: [...] }) into message summaries. */
-export function normalizeMessageList(body: unknown): MessageSummary[] {
+/** Normalized result of a Graph list response ({ value: [...] }). */
+export interface MessageList {
+  messages: MessageSummary[]
+  hasMore: boolean
+}
+
+/** Normalizes a Graph list response into message summaries plus a hasMore flag. */
+export function normalizeMessageList(body: unknown): MessageList {
   const parsed = graphMessageListSchema.safeParse(body)
   if (!parsed.success) {
     throw new PowerAutomateError('malformed response: expected a list of messages')
   }
-  return parsed.data.value.map(toSummary)
+  return {
+    messages: parsed.data.value.map(toSummary),
+    hasMore: parsed.data['@odata.nextLink'] !== undefined,
+  }
 }
 
 /** Normalizes a single Graph message into a message detail. */

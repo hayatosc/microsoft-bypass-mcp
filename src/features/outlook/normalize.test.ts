@@ -52,8 +52,17 @@ const detail = {
 }
 
 describe('normalizeMessageList', () => {
-  it('maps a Graph list response to MessageSummary[]', () => {
-    expect(normalizeMessageList({ value: [graphSummaryItem] })).toEqual([summary])
+  it('maps a Graph list response to summaries with hasMore=false', () => {
+    expect(normalizeMessageList({ value: [graphSummaryItem] })).toEqual({
+      messages: [summary],
+      hasMore: false,
+    })
+  })
+
+  it('sets hasMore when @odata.nextLink is present', () => {
+    expect(
+      normalizeMessageList({ value: [graphSummaryItem], '@odata.nextLink': 'https://graph/' }),
+    ).toEqual({ messages: [summary], hasMore: true })
   })
 
   it('throws a clean error on a malformed list response', () => {

@@ -13,7 +13,7 @@ const messageBaseSchema = z.object({
   id: z.string(),
   subject: z.string(),
   from: recipientSchema,
-  receivedDateTime: z.string(),
+  receivedDateTime: z.iso.datetime(),
   hasAttachments: z.boolean(),
   importance: z.enum(['low', 'normal', 'high']),
   isRead: z.boolean(),
@@ -34,22 +34,24 @@ export const messageDetailSchema = messageBaseSchema.extend({
 })
 export type MessageDetail = z.infer<typeof messageDetailSchema>
 
-export const listMessagesInputSchema = {
-  limit: z.number().int().min(1).max(100).default(5),
-}
-export const listMessagesOutputSchema = {
+export const listMessagesInputSchema = z.object({
+  limit: z.number().int().min(1).max(50).default(5),
+})
+export const listMessagesOutputSchema = z.object({
   messages: z.array(messageSummarySchema),
-}
+  hasMore: z.boolean(),
+})
 
-export const searchMessagesInputSchema = {
+export const searchMessagesInputSchema = z.object({
   query: z.string().min(1),
-  limit: z.number().int().min(1).max(100).default(10),
-}
-export const searchMessagesOutputSchema = {
+  limit: z.number().int().min(1).max(50).default(10),
+})
+export const searchMessagesOutputSchema = z.object({
   messages: z.array(messageSummarySchema),
-}
+  hasMore: z.boolean(),
+})
 
-export const getMessageInputSchema = {
+export const getMessageInputSchema = z.object({
   messageId: z.string().min(1),
-}
+})
 export const getMessageOutputSchema = messageDetailSchema

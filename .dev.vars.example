@@ -1,2 +1,7 @@
 # Copy to .dev.vars for local development (never commit real values).
 POWER_AUTOMATE_URL=https://prod-xxx.logic.azure.com/workflows/xxx/triggers/manual/paths/invoke
+
+# Cloudflare Access JWT validation. Leave both unset for local development
+# (wrangler dev has no Access in front); set both in production.
+# TEAM_DOMAIN=https://<your-team-name>.cloudflareaccess.com
+# POLICY_AUD=<application-audience-aud-tag>
