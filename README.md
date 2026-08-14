@@ -35,13 +35,14 @@ generic Graph proxy.
 
 The `/mcp` endpoint is protected in two layers:
 
-1. **Cloudflare Access** (OAuth) sits in front of the Worker; only clients admitted by the
+1. **Cloudflare Access** (OAuth) should sit in front of the Worker — on the
+   `*.workers.dev` URL, a custom domain, or both — so only clients admitted by the
    Access policy reach it.
-2. The Worker additionally validates the Access JWT via the `Cf-Access-Jwt-Assertion`
-   header (defense in depth), using `TEAM_DOMAIN` and `POLICY_AUD` environment variables.
+2. The Worker validates the Access JWT via the `Cf-Access-Jwt-Assertion` header
+   (defense in depth), using `TEAM_DOMAIN` and `POLICY_AUD` environment variables.
 
-Direct `*.workers.dev` URLs are disabled (`workers_dev: false`, `preview_urls: false`) so the
-Worker is reachable only through the Access-protected custom domain.
+When `TEAM_DOMAIN` / `POLICY_AUD` are unset, the in-Worker JWT check is skipped (local
+development, or before Access is configured).
 
 ## Requirements
 
@@ -90,4 +91,5 @@ bun run test         # vitest
 bun run deploy       # wrangler deploy
 ```
 
-Because `workers_dev` is disabled, deploy requires a custom domain route on the Worker.
+The Worker is served on `https://microsoft-bypass-mcp.hayatosc.workers.dev` (and any
+custom domain routes you add).

@@ -2,7 +2,5 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "microsoft-bypass-mcp",
   "compatibility_date": "2025-08-03",
-  "main": "./src/index.ts",
-  "workers_dev": false,
-  "preview_urls": false
+  "main": "./src/index.ts"
 }

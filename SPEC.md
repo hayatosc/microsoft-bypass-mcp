@@ -94,18 +94,16 @@ from the environment-derived base URL.
 
 The `/mcp` endpoint is protected in two layers:
 
-1. **Cloudflare Access** (OAuth) sits in front of the Worker, so only clients
-   admitted by the Access policy reach `/mcp`.
+1. **Cloudflare Access** (OAuth) sits in front of the Worker (on the
+   `*.workers.dev` URL and/or a custom domain), so only clients admitted by the
+   Access policy reach `/mcp`.
 2. The Worker additionally validates the Access JWT carried on the
    `Cf-Access-Jwt-Assertion` header (via `TEAM_DOMAIN` + `POLICY_AUD`), as
    defense in depth against requests that reach the Worker without passing
    Access.
 
-Direct `*.workers.dev` and preview URLs are disabled (`workers_dev: false`,
-`preview_urls: false`) so the Worker is reachable only through the
-Access-protected custom domain. When `TEAM_DOMAIN`/`POLICY_AUD` are unset
-(local development), JWT validation is skipped because no Access fronts the
-Worker.
+When `TEAM_DOMAIN`/`POLICY_AUD` are unset (local development, or before Access
+is configured), JWT validation is skipped.
 
 ## 6. Environment
 
