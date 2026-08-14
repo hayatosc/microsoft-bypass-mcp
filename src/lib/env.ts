@@ -4,6 +4,8 @@
  */
 export interface Bindings {
   POWER_AUTOMATE_URL?: string
+  /** Gateway key the Power Automate HTTP trigger requires (X-MCP-Gateway-Key). */
+  POWER_AUTOMATE_GATEWAY_KEY?: string
   /** Cloudflare Access team domain, e.g. `https://<team>.cloudflareaccess.com`. */
   TEAM_DOMAIN?: string
   /** Cloudflare Access Application Audience (AUD) tag for the MCP application. */
@@ -17,6 +19,15 @@ export function getPowerAutomateUrl(bindings: Bindings): string {
     throw new Error('Missing required binding: POWER_AUTOMATE_URL')
   }
   return url
+}
+
+/** Returns the Power Automate gateway key or throws if it is not configured. */
+export function getPowerAutomateGatewayKey(bindings: Bindings): string {
+  const key = bindings.POWER_AUTOMATE_GATEWAY_KEY
+  if (!key) {
+    throw new Error('Missing required binding: POWER_AUTOMATE_GATEWAY_KEY')
+  }
+  return key
 }
 
 /** Access JWT verification configuration, derived from the team domain + AUD. */

@@ -9,7 +9,7 @@ import { Hono } from 'hono'
 
 import { createOutlookMcpServer, TOOL_NAMES } from './features/outlook/server.js'
 import { createAccessAuth } from './lib/access-auth.js'
-import { getPowerAutomateUrl } from './lib/env.js'
+import { getPowerAutomateGatewayKey, getPowerAutomateUrl } from './lib/env.js'
 import type { Bindings } from './lib/env.js'
 import { PowerAutomateClient } from './lib/power-automate.js'
 
@@ -27,7 +27,10 @@ app.use('/mcp', createAccessAuth())
 
 app.all('/mcp', (c) => {
   // Fresh, stateless server + handler per request; no state survives.
-  const client = new PowerAutomateClient({ baseUrl: getPowerAutomateUrl(c.env) })
+  const client = new PowerAutomateClient({
+    baseUrl: getPowerAutomateUrl(c.env),
+    gatewayKey: getPowerAutomateGatewayKey(c.env),
+  })
   const handler = createMcpHandler(() => createOutlookMcpServer(client))
   return handler.fetch(c.req.raw)
 })

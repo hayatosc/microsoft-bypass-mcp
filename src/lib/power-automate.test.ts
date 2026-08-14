@@ -13,7 +13,7 @@ const requestSchema = z.object({
   args: z.record(z.string(), z.unknown()),
 })
 
-type RequestRecord = { url: string; body: unknown }
+type RequestRecord = { url: string; headers: Record<string, string>; body: unknown }
 
 function mockFetch(respond: (record: RequestRecord) => Response): {
   records: RequestRecord[]
@@ -23,6 +23,7 @@ function mockFetch(respond: (record: RequestRecord) => Response): {
   const fetchFn: typeof fetch = async (input, init) => {
     const record = {
       url: typeof input === 'string' ? input : input instanceof URL ? input.href : input.url,
+      headers: Object.fromEntries(new Headers(init?.headers).entries()),
       body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined,
     }
     records.push(record)
@@ -44,7 +45,11 @@ describe('PowerAutomateClient', () => {
       { operation: 'get_message' as const, args: { messageId: 'msg-1' } },
     ]
     const { records, fetchFn } = mockFetch((record) => successResponse(record, { value: [] }))
-    const client = new PowerAutomateClient({ baseUrl: 'https://example.test/flow', fetchFn })
+    const client = new PowerAutomateClient({
+      baseUrl: 'https://example.test/flow',
+      gatewayKey: 'test-gateway-key',
+      fetchFn,
+    })
 
     for (const { operation, args } of cases) {
       await client.call(operation, args)
@@ -52,6 +57,7 @@ describe('PowerAutomateClient', () => {
 
     expect(records).toHaveLength(cases.length)
     expect(records[0]?.url).toBe('https://example.test/flow')
+    expect(records[0]?.headers['x-mcp-gateway-key']).toBe('test-gateway-key')
     const sent = cases.map((_, i) => requestSchema.parse(records[i]?.body))
     expect(sent.map((s) => s.operation)).toEqual([
       'list_messages',
@@ -67,7 +73,11 @@ describe('PowerAutomateClient', () => {
 
   it('generates a fresh requestId per call', async () => {
     const { records, fetchFn } = mockFetch((record) => successResponse(record, { value: [] }))
-    const client = new PowerAutomateClient({ baseUrl: 'https://example.test/flow', fetchFn })
+    const client = new PowerAutomateClient({
+      baseUrl: 'https://example.test/flow',
+      gatewayKey: 'test-gateway-key',
+      fetchFn,
+    })
 
     await client.call('list_messages', { top: 5 })
     await client.call('list_messages', { top: 5 })
@@ -79,7 +89,11 @@ describe('PowerAutomateClient', () => {
   it('parses the response JSON and unwraps the envelope', async () => {
     const data = { value: [{ id: 'msg-1' }] }
     const { fetchFn } = mockFetch((record) => successResponse(record, data))
-    const client = new PowerAutomateClient({ baseUrl: 'https://example.test/flow', fetchFn })
+    const client = new PowerAutomateClient({
+      baseUrl: 'https://example.test/flow',
+      gatewayKey: 'test-gateway-key',
+      fetchFn,
+    })
 
     await expect(client.call('get_message', { messageId: 'msg-1' })).resolves.toEqual(data)
   })
@@ -88,7 +102,11 @@ describe('PowerAutomateClient', () => {
     const { fetchFn } = mockFetch(
       () => new Response(JSON.stringify({ ok: false }), { status: 200 }),
     )
-    const client = new PowerAutomateClient({ baseUrl: 'https://example.test/flow', fetchFn })
+    const client = new PowerAutomateClient({
+      baseUrl: 'https://example.test/flow',
+      gatewayKey: 'test-gateway-key',
+      fetchFn,
+    })
 
     await expect(client.call('list_messages', { top: 5 })).rejects.toThrow(
       'list_messages returned an unexpected response',
@@ -108,7 +126,11 @@ describe('PowerAutomateClient', () => {
         { status: 200 },
       )
     })
-    const client = new PowerAutomateClient({ baseUrl: 'https://example.test/flow', fetchFn })
+    const client = new PowerAutomateClient({
+      baseUrl: 'https://example.test/flow',
+      gatewayKey: 'test-gateway-key',
+      fetchFn,
+    })
 
     await expect(client.call('list_messages', { top: 5 })).rejects.toThrow(
       'list_messages response requestId does not match',
@@ -123,7 +145,11 @@ describe('PowerAutomateClient', () => {
         { status: 200 },
       )
     })
-    const client = new PowerAutomateClient({ baseUrl: 'https://example.test/flow', fetchFn })
+    const client = new PowerAutomateClient({
+      baseUrl: 'https://example.test/flow',
+      gatewayKey: 'test-gateway-key',
+      fetchFn,
+    })
 
     await expect(client.call('list_messages', { top: 5 })).rejects.toThrow(
       'list_messages response operation does not match',
@@ -132,7 +158,11 @@ describe('PowerAutomateClient', () => {
 
   it('throws a typed error on non-2xx responses', async () => {
     const { fetchFn } = mockFetch(() => new Response('nope', { status: 500 }))
-    const client = new PowerAutomateClient({ baseUrl: 'https://example.test/flow', fetchFn })
+    const client = new PowerAutomateClient({
+      baseUrl: 'https://example.test/flow',
+      gatewayKey: 'test-gateway-key',
+      fetchFn,
+    })
 
     await expect(client.call('list_messages', { top: 5 })).rejects.toThrow(
       'list_messages failed with HTTP status 500',
@@ -141,7 +171,11 @@ describe('PowerAutomateClient', () => {
 
   it('rejects a 2xx response with a non-JSON body without leaking the URL', async () => {
     const { fetchFn } = mockFetch(() => new Response('not json', { status: 200 }))
-    const client = new PowerAutomateClient({ baseUrl: 'https://example.test/flow', fetchFn })
+    const client = new PowerAutomateClient({
+      baseUrl: 'https://example.test/flow',
+      gatewayKey: 'test-gateway-key',
+      fetchFn,
+    })
 
     const error = await client.call('list_messages', { top: 5 }).catch((e: unknown) => e)
     expect(error).toBeInstanceOf(PowerAutomateError)
@@ -156,7 +190,11 @@ describe('PowerAutomateClient', () => {
       const { fetchFn } = mockFetch((record) =>
         successResponse(record, { value: [{ id: 'secret-body' }] }),
       )
-      const client = new PowerAutomateClient({ baseUrl: 'https://example.test/flow', fetchFn })
+      const client = new PowerAutomateClient({
+        baseUrl: 'https://example.test/flow',
+        gatewayKey: 'test-gateway-key',
+        fetchFn,
+      })
 
       await client.call('list_messages', { top: 5 })
 
@@ -169,6 +207,7 @@ describe('PowerAutomateClient', () => {
       const raw = spy.mock.calls.map((args) => args.join(' ')).join('\n')
       expect(raw).not.toContain('https://example.test')
       expect(raw).not.toContain('secret-body')
+      expect(raw).not.toContain('test-gateway-key')
     } finally {
       spy.mockRestore()
     }
@@ -176,7 +215,11 @@ describe('PowerAutomateClient', () => {
 
   it('links each operation to its args at the type level', async () => {
     const { fetchFn } = mockFetch((record) => successResponse(record, { value: [] }))
-    const client = new PowerAutomateClient({ baseUrl: 'https://example.test/flow', fetchFn })
+    const client = new PowerAutomateClient({
+      baseUrl: 'https://example.test/flow',
+      gatewayKey: 'test-gateway-key',
+      fetchFn,
+    })
 
     // This is a compile-time-only assertion: the @ts-expect-error proves the
     // mismatched args fail typecheck. At runtime the mock echoes whatever
@@ -197,13 +240,18 @@ describe('PowerAutomateClient', () => {
       })
     })
     vi.stubGlobal('fetch', globalFetch)
-    const client = new PowerAutomateClient({ baseUrl: 'https://example.test/flow' })
+    const client = new PowerAutomateClient({
+      baseUrl: 'https://example.test/flow',
+      gatewayKey: 'test-gateway-key',
+    })
 
     await client.call('list_messages', { top: 5 })
 
     expect(globalFetch).toHaveBeenCalledOnce()
     const call = globalFetch.mock.calls[0]
     expect(call?.[0]).toBe('https://example.test/flow')
+    const headers = new Headers(call?.[1]?.headers)
+    expect(headers.get('X-MCP-Gateway-Key')).toBe('test-gateway-key')
     const body = call?.[1]?.body
     if (typeof body !== 'string') throw new Error('expected a string request body')
     const parsed = requestSchema.parse(JSON.parse(body))
@@ -218,6 +266,7 @@ describe('PowerAutomateClient', () => {
       })
     const client = new PowerAutomateClient({
       baseUrl: 'https://example.test/flow',
+      gatewayKey: 'test-gateway-key',
       fetchFn,
       timeoutMs: 20,
     })

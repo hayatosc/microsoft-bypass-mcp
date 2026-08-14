@@ -24,6 +24,8 @@ export type PowerAutomateOperation = keyof PowerAutomateOperations
 /** Options for constructing a {@link PowerAutomateClient}. */
 export interface PowerAutomateClientOptions {
   baseUrl: string
+  /** Gateway key sent as the `X-MCP-Gateway-Key` header required by the trigger. */
+  gatewayKey: string
   /** Injectable for tests; defaults to the global fetch. */
   fetchFn?: typeof fetch
   /** Injectable for tests; defaults to 30s. */
@@ -58,11 +60,13 @@ export class PowerAutomateError extends Error {
  */
 export class PowerAutomateClient {
   private readonly baseUrl: string
+  private readonly gatewayKey: string
   private readonly fetchFn: typeof fetch
   private readonly timeoutMs: number
 
   constructor(options: PowerAutomateClientOptions) {
     this.baseUrl = options.baseUrl
+    this.gatewayKey = options.gatewayKey
     // Wrap the global fetch so it is always invoked as a plain function call.
     // Calling the native fetch as a method (this.fetchFn(...)) loses its `this`
     // binding and throws "Illegal invocation" on the Workers runtime.
@@ -88,7 +92,10 @@ export class PowerAutomateClient {
     try {
       const response = await this.fetchFn(this.baseUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-MCP-Gateway-Key': this.gatewayKey,
+        },
         body: JSON.stringify({ operation, requestId, args }),
         signal,
       })

@@ -55,7 +55,8 @@ src/
 - **Auth** is Cloudflare Access (OAuth) in front of the Worker, plus in-Worker
   validation of the Access JWT (`Cf-Access-Jwt-Assertion`). Keep both; do not add
   app-level auth back.
-- `POWER_AUTOMATE_URL` lives in `.dev.vars` (gitignored); `TEAM_DOMAIN` and
+- `POWER_AUTOMATE_URL` and `POWER_AUTOMATE_GATEWAY_KEY` live in `.dev.vars`
+  (gitignored); `POWER_AUTOMATE_GATEWAY_KEY`, `TEAM_DOMAIN` and
   `POLICY_AUD` are set as Cloudflare Workers secrets (`wrangler secret put`).
   Never commit any of them.
 

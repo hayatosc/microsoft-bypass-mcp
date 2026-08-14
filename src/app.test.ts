@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
 import app from './app.js'
-import { getAccessConfig, getPowerAutomateUrl } from './lib/env.js'
+import { getAccessConfig, getPowerAutomateGatewayKey, getPowerAutomateUrl } from './lib/env.js'
 
 const env = {
   POWER_AUTOMATE_URL: 'https://example.test/flow',
+  POWER_AUTOMATE_GATEWAY_KEY: 'test-gateway-key',
 }
 
 describe('mcp endpoint', () => {
@@ -48,6 +49,7 @@ describe('public info', () => {
 describe('env accessors', () => {
   it('fail fast on missing required values', () => {
     expect(() => getPowerAutomateUrl({})).toThrow('POWER_AUTOMATE_URL')
+    expect(() => getPowerAutomateGatewayKey({})).toThrow('POWER_AUTOMATE_GATEWAY_KEY')
   })
 
   it('returns null when Access is not configured', () => {

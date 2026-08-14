@@ -36,6 +36,7 @@ Microsoft Graph
 
 ```
 POWER_AUTOMATE_URL=https://prod-xxx.logic.azure.com/workflows/xxx/triggers/manual/paths/invoke
+POWER_AUTOMATE_GATEWAY_KEY=<gateway key>
 ```
 
 For production, set these as Worker secrets/vars (`wrangler secret put`).

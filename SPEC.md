@@ -107,18 +107,21 @@ is configured), JWT validation is skipped.
 
 ## 6. Environment
 
-| Variable            | Required | Purpose                                                     |
-|---------------------|----------|-------------------------------------------------------------|
-| `POWER_AUTOMATE_URL`| yes      | Power Automate HTTP-trigger URL.                            |
-| `TEAM_DOMAIN`       | prod     | Cloudflare Access team domain (`https://<team>…access.com`). |
-| `POLICY_AUD`        | prod     | Cloudflare Access Application Audience (AUD) tag.           |
+| Variable                 | Required | Purpose                                                      |
+|--------------------------|----------|--------------------------------------------------------------|
+| `POWER_AUTOMATE_URL`     | yes      | Power Automate HTTP-trigger URL.                             |
+| `POWER_AUTOMATE_GATEWAY_KEY` | yes  | Gateway key sent as the `X-MCP-Gateway-Key` request header.  |
+| `TEAM_DOMAIN`            | prod     | Cloudflare Access team domain (`https://<team>…access.com`). |
+| `POLICY_AUD`             | prod     | Cloudflare Access Application Audience (AUD) tag.            |
 
 Missing required variables fail fast at startup/request time (no silent
 defaults). `TEAM_DOMAIN` and `POLICY_AUD` must be set together; a partially
 configured pair fails fast.
 
-`TEAM_DOMAIN` and `POLICY_AUD` are set as **Cloudflare Workers secrets**
-(`wrangler secret put`), not in `.dev.vars`. Leaving them unset skips JWT
+`POWER_AUTOMATE_GATEWAY_KEY`, `TEAM_DOMAIN` and `POLICY_AUD` are set as
+**Cloudflare Workers secrets** (`wrangler secret put`), not in `.dev.vars`.
+`POWER_AUTOMATE_URL` lives in `.dev.vars` for local development, as does the
+gateway key. Leaving `TEAM_DOMAIN`/`POLICY_AUD` unset skips JWT
 validation, which is the intended behavior for local development (`wrangler dev`
 has no Access in front). Values are:
 
@@ -132,6 +135,10 @@ contract below is the **verified** shape of the real flow (reverse-engineered
 from live responses).
 
 ### Request body
+
+Every request POSTs to the trigger with the `X-MCP-Gateway-Key` header set to
+the gateway key (bound as `POWER_AUTOMATE_GATEWAY_KEY`); the trigger rejects
+requests without it.
 
 ```jsonc
 {

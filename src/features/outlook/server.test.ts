@@ -69,7 +69,11 @@ describe('createOutlookMcpServer', () => {
   it('registers exactly the three tools', async () => {
     const { fetchFn } = mockFlow({ value: [] })
     const mcpClient = await connectClient(
-      new PowerAutomateClient({ baseUrl: 'https://example.test', fetchFn }),
+      new PowerAutomateClient({
+        baseUrl: 'https://example.test',
+        gatewayKey: 'test-gateway-key',
+        fetchFn,
+      }),
     )
 
     const { tools } = await mcpClient.listTools()
@@ -83,7 +87,11 @@ describe('createOutlookMcpServer', () => {
   it('outlook_list_messages translates limit to top and returns summaries', async () => {
     const { records, fetchFn } = mockFlow({ value: [graphSummaryItem] })
     const mcpClient = await connectClient(
-      new PowerAutomateClient({ baseUrl: 'https://example.test/flow', fetchFn }),
+      new PowerAutomateClient({
+        baseUrl: 'https://example.test/flow',
+        gatewayKey: 'test-gateway-key',
+        fetchFn,
+      }),
     )
 
     const result = await mcpClient.callTool({
@@ -99,7 +107,11 @@ describe('createOutlookMcpServer', () => {
   it('outlook_search_messages sends the query and a default top', async () => {
     const { records, fetchFn } = mockFlow({ value: [graphSummaryItem] })
     const mcpClient = await connectClient(
-      new PowerAutomateClient({ baseUrl: 'https://example.test/flow', fetchFn }),
+      new PowerAutomateClient({
+        baseUrl: 'https://example.test/flow',
+        gatewayKey: 'test-gateway-key',
+        fetchFn,
+      }),
     )
 
     const result = await mcpClient.callTool({
@@ -115,7 +127,11 @@ describe('createOutlookMcpServer', () => {
   it('outlook_get_message sends the messageId and returns the full detail', async () => {
     const { records, fetchFn } = mockFlow(graphDetailItem)
     const mcpClient = await connectClient(
-      new PowerAutomateClient({ baseUrl: 'https://example.test/flow', fetchFn }),
+      new PowerAutomateClient({
+        baseUrl: 'https://example.test/flow',
+        gatewayKey: 'test-gateway-key',
+        fetchFn,
+      }),
     )
 
     const result = await mcpClient.callTool({
@@ -142,7 +158,11 @@ describe('createOutlookMcpServer', () => {
   it('surfaces Power Automate errors without leaking the URL', async () => {
     const fetchFn: typeof fetch = async () => new Response('nope', { status: 500 })
     const mcpClient = await connectClient(
-      new PowerAutomateClient({ baseUrl: 'https://example.test/flow', fetchFn }),
+      new PowerAutomateClient({
+        baseUrl: 'https://example.test/flow',
+        gatewayKey: 'test-gateway-key',
+        fetchFn,
+      }),
     )
 
     const result = await mcpClient.request({
