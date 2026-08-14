@@ -18,8 +18,10 @@ export interface PowerAutomateOperations {
   get_message: { args: { messageId: string } }
 }
 
+/** Names of the operations Power Automate implements. */
 export type PowerAutomateOperation = keyof PowerAutomateOperations
 
+/** Options for constructing a {@link PowerAutomateClient}. */
 export interface PowerAutomateClientOptions {
   baseUrl: string
   /** Injectable for tests; defaults to the global fetch. */
@@ -50,6 +52,10 @@ export class PowerAutomateError extends Error {
   }
 }
 
+/**
+ * Stateless client that POSTs a single operation to the Power Automate HTTP
+ * trigger and unwraps the validated success envelope.
+ */
 export class PowerAutomateClient {
   private readonly baseUrl: string
   private readonly fetchFn: typeof fetch

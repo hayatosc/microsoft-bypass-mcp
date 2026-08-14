@@ -16,6 +16,7 @@ import {
   searchMessagesOutputSchema,
 } from './schema.js'
 
+/** Tool names registered by {@link createOutlookMcpServer}. */
 export const TOOL_NAMES = [
   'outlook_list_messages',
   'outlook_search_messages',

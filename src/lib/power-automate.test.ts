@@ -178,6 +178,9 @@ describe('PowerAutomateClient', () => {
     const { fetchFn } = mockFetch((record) => successResponse(record, { value: [] }))
     const client = new PowerAutomateClient({ baseUrl: 'https://example.test/flow', fetchFn })
 
+    // This is a compile-time-only assertion: the @ts-expect-error proves the
+    // mismatched args fail typecheck. At runtime the mock echoes whatever
+    // operation it receives, so nothing is actually verified here.
     const wrong = async (): Promise<void> => {
       // @ts-expect-error — get_message takes { messageId }, not { top }
       await client.call('get_message', { top: 20 })

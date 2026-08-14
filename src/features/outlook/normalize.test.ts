@@ -65,6 +65,14 @@ describe('normalizeMessageList', () => {
     ).toEqual({ messages: [summary], hasMore: true })
   })
 
+  it('maps a null sender to an empty recipient', () => {
+    const withNullFrom = { ...graphSummaryItem, from: null }
+    expect(normalizeMessageList({ value: [withNullFrom] })).toEqual({
+      messages: [{ ...summary, from: { name: '', address: '' } }],
+      hasMore: false,
+    })
+  })
+
   it('throws a clean error on a malformed list response', () => {
     expect(() => normalizeMessageList({ value: [{ id: 1 }] })).toThrow(PowerAutomateError)
   })

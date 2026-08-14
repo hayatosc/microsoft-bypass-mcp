@@ -120,10 +120,10 @@ configured pair fails fast.
 `TEAM_DOMAIN` and `POLICY_AUD` are set as **Cloudflare Workers secrets**
 (`wrangler secret put`), not in `.dev.vars`. Leaving them unset skips JWT
 validation, which is the intended behavior for local development (`wrangler dev`
-has no Access in front). For this deployment:
+has no Access in front). Values are:
 
-- `TEAM_DOMAIN=https://hayatosc.cloudflareaccess.com`
-- `POLICY_AUD=6309af98a121fa9416413fc8d571ec689a5c50440a88f1881862c90decd97191`
+- `TEAM_DOMAIN=https://<team>.cloudflareaccess.com`
+- `POLICY_AUD=<aud-tag-from-access-dashboard>`
 
 ## 7. Power Automate protocol
 

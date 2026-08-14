@@ -8,9 +8,31 @@
  */
 import { createMiddleware } from 'hono/factory'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
+import type { RemoteJWKSet } from 'jose'
 
 import { getAccessConfig } from './env.js'
 import type { Bindings } from './env.js'
+
+/**
+ * JWKS resolvers memoized per team domain. Module scope is shared across
+ * requests within a Worker isolate, so the resolver — and the JWKS cache held
+ * inside `jose` — survives between requests instead of re-fetching the signing
+ * keys on every call.
+ */
+const remoteJwkSets = new Map<string, RemoteJWKSet>()
+
+function getRemoteJwkSet(domain: string): RemoteJWKSet {
+  // Strip a trailing slash so `TEAM_DOMAIN` values ending in "/" do not produce
+  // a double-slash certs URL.
+  const normalized = domain.replace(/\/+$/, '')
+  const cached = remoteJwkSets.get(normalized)
+  if (cached) {
+    return cached
+  }
+  const jwks = createRemoteJWKSet(new URL(`${normalized}/cdn-cgi/access/certs`))
+  remoteJwkSets.set(normalized, jwks)
+  return jwks
+}
 
 /** Middleware enforcing Cloudflare Access JWT assertions. */
 export function createAccessAuth() {
@@ -27,8 +49,7 @@ export function createAccessAuth() {
     }
 
     try {
-      const jwks = createRemoteJWKSet(new URL(`${config.domain}/cdn-cgi/access/certs`))
-      await jwtVerify(token, jwks, {
+      await jwtVerify(token, getRemoteJwkSet(config.domain), {
         issuer: config.domain,
         audience: config.aud,
       })

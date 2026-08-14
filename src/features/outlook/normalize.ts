@@ -19,10 +19,15 @@ const graphRecipientSchema = z.object({
   }),
 })
 
+// Graph returns `from` as null for some system-generated messages.
+const nullableGraphRecipientSchema = graphRecipientSchema
+  .nullable()
+  .transform((recipient) => recipient ?? { emailAddress: { name: '', address: '' } })
+
 const graphMessageSummarySchema = z.object({
   id: z.string(),
   subject: z.string(),
-  from: graphRecipientSchema,
+  from: nullableGraphRecipientSchema,
   receivedDateTime: z.iso.datetime(),
   hasAttachments: z.boolean(),
   importance: z.enum(['low', 'normal', 'high']),
@@ -36,7 +41,7 @@ const graphMessageSummarySchema = z.object({
 const graphMessageDetailSchema = z.object({
   id: z.string(),
   subject: z.string(),
-  from: graphRecipientSchema,
+  from: nullableGraphRecipientSchema,
   toRecipients: z.array(graphRecipientSchema),
   ccRecipients: z.array(graphRecipientSchema),
   receivedDateTime: z.iso.datetime(),
