@@ -20,8 +20,8 @@ Microsoft Graph
 
 | Tool | Input | Output |
 | --- | --- | --- |
-| `outlook_list_messages` | `{ limit?: number }` (default 5, 1–100) | `{ messages: MessageSummary[] }` |
-| `outlook_search_messages` | `{ query: string, limit?: number }` (default 10, 1–100) | `{ messages: MessageSummary[] }` |
+| `outlook_list_messages` | `{ limit?: number }` (default 5, 1–50) | `{ messages: MessageSummary[], hasMore: boolean }` |
+| `outlook_search_messages` | `{ query: string, limit?: number }` (default 10, 1–50) | `{ messages: MessageSummary[], hasMore: boolean }` |
 | `outlook_get_message` | `{ messageId: string }` | `MessageDetail` |
 
 ## Requirements

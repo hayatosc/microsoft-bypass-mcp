@@ -1,12 +1,14 @@
 /**
  * Hono app exposing the public info page and the MCP Streamable HTTP endpoint
- * at /mcp. Authentication is delegated to Cloudflare Access (OAuth) placed in
- * front of the Worker; this app performs no access control itself.
+ * at /mcp. The /mcp endpoint is guarded by Cloudflare Access JWT validation
+ * (defense in depth behind the Access policy itself); the MCP handler uses a
+ * fresh, stateless server per request.
  */
-import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
+import { createMcpHandler } from '@modelcontextprotocol/server'
 import { Hono } from 'hono'
 
 import { createOutlookMcpServer, TOOL_NAMES } from './features/outlook/server.js'
+import { createAccessAuth } from './lib/access-auth.js'
 import { getPowerAutomateUrl } from './lib/env.js'
 import type { Bindings } from './lib/env.js'
 import { PowerAutomateClient } from './lib/power-automate.js'
@@ -21,13 +23,13 @@ app.get('/', (c) =>
   }),
 )
 
-app.all('/mcp', async (c) => {
-  // Fresh, stateless server + transport per request; no state survives.
+app.use('/mcp', createAccessAuth())
+
+app.all('/mcp', (c) => {
+  // Fresh, stateless server + handler per request; no state survives.
   const client = new PowerAutomateClient({ baseUrl: getPowerAutomateUrl(c.env) })
-  const transport = new WebStandardStreamableHTTPServerTransport()
-  const server = createOutlookMcpServer(client)
-  await server.connect(transport)
-  return transport.handleRequest(c.req.raw)
+  const handler = createMcpHandler(() => createOutlookMcpServer(client))
+  return handler.fetch(c.req.raw)
 })
 
 export default app

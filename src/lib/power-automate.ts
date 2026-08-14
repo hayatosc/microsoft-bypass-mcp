@@ -1,17 +1,27 @@
 /**
  * Stateless client for the Power Automate HTTP trigger. Each call POSTs a
  * JSON envelope with an operation, a fresh requestId, and args, and unwraps
- * the `{ ok: true, data }` success envelope from the response.
+ * the `{ ok, requestId, operation, data }` success envelope from the response.
+ * The operation name is linked to its request args at the type level, so a
+ * mismatched operation/args pair fails to compile.
  */
 import { z } from 'zod'
 
-export type PowerAutomateOperation = 'list_messages' | 'search_messages' | 'get_message'
+/**
+ * The fixed operation surface Power Automate implements. Each operation maps a
+ * name to its request args. The Graph response shape is validated downstream by
+ * the feature normalizers, so it stays `unknown` here.
+ */
+export interface PowerAutomateOperations {
+  list_messages: { args: { top: number } }
+  search_messages: { args: { query: string; top: number } }
+  get_message: { args: { messageId: string } }
+}
 
-export type PowerAutomateArgs =
-  | { top: number }
-  | { query: string; top: number }
-  | { messageId: string }
+/** Names of the operations Power Automate implements. */
+export type PowerAutomateOperation = keyof PowerAutomateOperations
 
+/** Options for constructing a {@link PowerAutomateClient}. */
 export interface PowerAutomateClientOptions {
   baseUrl: string
   /** Injectable for tests; defaults to the global fetch. */
@@ -20,9 +30,14 @@ export interface PowerAutomateClientOptions {
   timeoutMs?: number
 }
 
-/** Success envelope returned by the Power Automate flow for 2xx responses. */
+/**
+ * Success envelope returned by the Power Automate flow for 2xx responses.
+ * `requestId` and `operation` are echoes of the request and are checked below.
+ */
 const successEnvelopeSchema = z.object({
   ok: z.literal(true),
+  requestId: z.string().uuid(),
+  operation: z.string(),
   data: z.unknown(),
 })
 
@@ -37,6 +52,10 @@ export class PowerAutomateError extends Error {
   }
 }
 
+/**
+ * Stateless client that POSTs a single operation to the Power Automate HTTP
+ * trigger and unwraps the validated success envelope.
+ */
 export class PowerAutomateClient {
   private readonly baseUrl: string
   private readonly fetchFn: typeof fetch
@@ -54,12 +73,18 @@ export class PowerAutomateClient {
   /**
    * POSTs an operation to Power Automate and returns the Graph response
    * (the `data` field of the success envelope).
-   * @throws {PowerAutomateError} on non-2xx responses, timeouts, and network errors.
+   * @throws {PowerAutomateError} on non-2xx responses, timeouts, network errors,
+   *   and envelope mismatches.
    */
-  async call(operation: PowerAutomateOperation, args: PowerAutomateArgs): Promise<unknown> {
+  async call<K extends PowerAutomateOperation>(
+    operation: K,
+    args: PowerAutomateOperations[K]['args'],
+  ): Promise<unknown> {
     const requestId = crypto.randomUUID()
-    console.log(`[power-automate] operation=${operation} requestId=${requestId}`)
+    const startedAt = Date.now()
     const signal = AbortSignal.timeout(this.timeoutMs)
+    let status = 0
+    let success = false
     try {
       const response = await this.fetchFn(this.baseUrl, {
         method: 'POST',
@@ -67,6 +92,7 @@ export class PowerAutomateClient {
         body: JSON.stringify({ operation, requestId, args }),
         signal,
       })
+      status = response.status
       if (!response.ok) {
         throw new PowerAutomateError(`${operation} failed with HTTP status ${response.status}`)
       }
@@ -75,6 +101,13 @@ export class PowerAutomateClient {
       if (!parsed.success) {
         throw new PowerAutomateError(`${operation} returned an unexpected response`)
       }
+      if (parsed.data.requestId !== requestId) {
+        throw new PowerAutomateError(`${operation} response requestId does not match`)
+      }
+      if (parsed.data.operation !== operation) {
+        throw new PowerAutomateError(`${operation} response operation does not match`)
+      }
+      success = true
       return parsed.data.data
     } catch (error) {
       if (error instanceof PowerAutomateError) {
@@ -84,6 +117,19 @@ export class PowerAutomateClient {
         throw new PowerAutomateError(`${operation} timed out`)
       }
       throw new PowerAutomateError(`${operation} failed to complete the request`)
+    } finally {
+      // Structured log: operation + requestId + timing only. Never the URL,
+      // args, or response body.
+      console.log(
+        JSON.stringify({
+          type: 'power_automate_request',
+          requestId,
+          operation,
+          durationMs: Date.now() - startedAt,
+          status,
+          success,
+        }),
+      )
     }
   }
 }

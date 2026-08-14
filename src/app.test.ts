@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import app from './app.js'
-import { getPowerAutomateUrl } from './lib/env.js'
+import { getAccessConfig, getPowerAutomateUrl } from './lib/env.js'
 
 const env = {
   POWER_AUTOMATE_URL: 'https://example.test/flow',
@@ -48,5 +48,24 @@ describe('public info', () => {
 describe('env accessors', () => {
   it('fail fast on missing required values', () => {
     expect(() => getPowerAutomateUrl({})).toThrow('POWER_AUTOMATE_URL')
+  })
+
+  it('returns null when Access is not configured', () => {
+    expect(getAccessConfig({})).toBeNull()
+  })
+
+  it('returns the config when both Access values are set', () => {
+    expect(
+      getAccessConfig({
+        TEAM_DOMAIN: 'https://team.cloudflareaccess.com',
+        POLICY_AUD: 'aud',
+      }),
+    ).toEqual({ domain: 'https://team.cloudflareaccess.com', aud: 'aud' })
+  })
+
+  it('fails fast on a partially configured Access pair', () => {
+    expect(() => getAccessConfig({ TEAM_DOMAIN: 'https://team.cloudflareaccess.com' })).toThrow(
+      'TEAM_DOMAIN',
+    )
   })
 })

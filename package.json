@@ -1,5 +1,5 @@
 {
-  "name": "microsoft-bypass-mcp",
+  "name": "university-m365-mcp",
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
@@ -13,12 +13,14 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/server": "^2.0.0",
     "hono": "^4.13.1",
+    "jose": "^6.2.8",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250804.0",
+    "@modelcontextprotocol/client": "^2.0.0",
     "oxfmt": "^0.63.0",
     "oxlint": "^1.78.0",
     "oxlint-tsgolint": "^7.0.2001",
