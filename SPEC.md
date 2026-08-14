@@ -117,6 +117,14 @@ Missing required variables fail fast at startup/request time (no silent
 defaults). `TEAM_DOMAIN` and `POLICY_AUD` must be set together; a partially
 configured pair fails fast.
 
+`TEAM_DOMAIN` and `POLICY_AUD` are set as **Cloudflare Workers secrets**
+(`wrangler secret put`), not in `.dev.vars`. Leaving them unset skips JWT
+validation, which is the intended behavior for local development (`wrangler dev`
+has no Access in front). For this deployment:
+
+- `TEAM_DOMAIN=https://hayatosc.cloudflareaccess.com`
+- `POLICY_AUD=6309af98a121fa9416413fc8d571ec689a5c50440a88f1881862c90decd97191`
+
 ## 7. Power Automate protocol
 
 The MCP server calls the Power Automate HTTP trigger with `POST` JSON. The
