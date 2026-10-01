@@ -85,7 +85,10 @@ ZIP expansion is checked against actual incremental output, not just size header
 CRC, local/central directory agreement, names and supported flags are validated.
 ZIP64, encrypted archives, traversal, duplicates, XML DTD/entity declarations and
 external worksheet targets are rejected. Inputs are request-local and parser
-exceptions are replaced with fixed, sanitized tool errors. Transport logs contain
+exceptions are replaced with fixed, sanitized tool errors. PDF failures additionally
+include an allowlisted [diagnostic code](pdf-diagnostics.md) for the first failing
+guard or parser stage, without original exception text or document values. This
+does not broaden supported PDF constructs or identify all issues in a file. Transport logs contain
 only operation, request ID, timing, status and success.
 
 PDF support is intentionally conservative: PDF 1.0–1.7 classic cross-reference tables with
