@@ -12,6 +12,13 @@ const MAX_CHARACTERS = 20000
 const TIMEOUT_MS = 10000
 
 const UNSUPPORTED = 'PDF is invalid, unsupported, encrypted, or exceeds safety limits'
+/** A fixed selector message, never raw PDF.js errors or document contents. */
+export class PdfRangeError extends Error {
+  constructor() {
+    super('The requested PDF page range or character limit is invalid.')
+    this.name = 'PdfRangeError'
+  }
+}
 function invalid(): never {
   throw new Error(UNSUPPORTED)
 }
@@ -575,7 +582,8 @@ async function withPdf<T>(
       timer = setTimeout(() => reject(new Error(UNSUPPORTED)), TIMEOUT_MS)
     })
     return await Promise.race([work(), timeout])
-  } catch {
+  } catch (error) {
+    if (error instanceof PdfRangeError) throw error
     return invalid()
   } finally {
     if (timer !== undefined) clearTimeout(timer)
@@ -616,7 +624,7 @@ export async function readPdf(bytes: Uint8Array, options: ReadPdfOptions = {}): 
     maxCharacters < 1 ||
     maxCharacters > MAX_CHARACTERS
   )
-    invalid()
+    throw new PdfRangeError()
   return await withPdf(bytes, async (pdf) => {
     const pageEnd = options.pageEnd ?? Math.min(pdf.numPages, pageStart + MAX_READ_PAGES - 1)
     if (
@@ -625,7 +633,7 @@ export async function readPdf(bytes: Uint8Array, options: ReadPdfOptions = {}): 
       pageEnd > pdf.numPages ||
       pageEnd - pageStart + 1 > MAX_READ_PAGES
     )
-      invalid()
+      throw new PdfRangeError()
     const pages: PdfPageText[] = []
     let remaining = maxCharacters
     for (let number = pageStart; number <= pageEnd; number++) {

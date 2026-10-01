@@ -165,6 +165,36 @@ describe('bounded attachment service', () => {
     expect(JSON.stringify(result)).not.toContain(secret)
     expect(JSON.stringify(result)).not.toContain('example.test')
   })
+  it.each([
+    { format: 'docx', sectionId: 'SYNTHETIC_PRIVATE_SECTION', offset: 0, length: 8 },
+    { format: 'docx', offset: 1000, length: 8 },
+    { format: 'xlsx', sheet: 'SYNTHETIC_PRIVATE_SHEET', range: 'A1' },
+    { format: 'xlsx', sheet: 'Budget', range: 'B2:A1' },
+    { format: 'xlsx', sheet: 'Budget', range: 'A1:A501' },
+    { format: 'pdf', pageStart: 1, pageEnd: 2 },
+  ] as const)('returns a sanitized selector error through MCP for %j', async (selection) => {
+    const file = syntheticAttachment(selection.format)
+    const { client } = flow(file)
+    const mcp = await connect(client)
+    const result = await mcp.request({
+      method: 'tools/call',
+      params: { name: 'outlook_read_attachment', arguments: { ...target, selection } },
+    })
+    expect(result.isError).toBe(true)
+    expect(result.content).toEqual([
+      {
+        type: 'text',
+        text:
+          selection.format === 'pdf'
+            ? 'The requested PDF page range or character limit is invalid.'
+            : 'The requested document section or cell range is invalid.',
+      },
+    ])
+    expect(result.structuredContent).toBeUndefined()
+    expect(JSON.stringify(result)).not.toContain(file.contentBytes)
+    expect(JSON.stringify(result)).not.toContain('SYNTHETIC_PRIVATE')
+    expect(JSON.stringify(result)).not.toContain('example.test')
+  })
   it('rejects format mismatch and unbounded selectors', async () => {
     const { client } = flow(syntheticAttachment('docx'))
     await expect(

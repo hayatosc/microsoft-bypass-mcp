@@ -8,7 +8,7 @@ vi.mock('unpdf', async (importOriginal) => {
 })
 
 import { makePdf } from './fixtures-pdf.js'
-import { inspectPdf, readPdf } from './pdf.js'
+import { inspectPdf, PdfRangeError, readPdf } from './pdf.js'
 
 const encoder = new TextEncoder()
 
@@ -73,13 +73,13 @@ describe('bounded PDF parsing', () => {
     { maxCharacters: 0 },
     { maxCharacters: 20001 },
   ])('rejects invalid page/character bounds %j', async (options) => {
-    await expect(readPdf(makePdf(), options)).rejects.toThrow('safety limits')
+    await expect(readPdf(makePdf(), options)).rejects.toThrow(PdfRangeError)
   })
 
   it('limits reads to ten pages and documents to 200 pages', async () => {
     const bytes = makePdf({ pages: 11 })
     expect((await readPdf(bytes)).pages).toHaveLength(10)
-    await expect(readPdf(bytes, { pageEnd: 11 })).rejects.toThrow('safety limits')
+    await expect(readPdf(bytes, { pageEnd: 11 })).rejects.toThrow(PdfRangeError)
     await expect(inspectPdf(makePdf({ pages: 201 }))).rejects.toThrow('safety limits')
   })
 
@@ -158,7 +158,7 @@ describe('bounded PDF parsing', () => {
     instrument()
     await inspectPdf(makePdf())
     instrument()
-    await expect(readPdf(makePdf(), { pageEnd: 3 })).rejects.toThrow('safety limits')
+    await expect(readPdf(makePdf(), { pageEnd: 3 })).rejects.toThrow(PdfRangeError)
     instrument()
     await expect(inspectPdf(replace(makePdf(), '/Root 1 0 R', '/Root 3 0 R'))).rejects.toThrow(
       'safety limits',

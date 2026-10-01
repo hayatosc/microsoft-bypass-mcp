@@ -2,6 +2,8 @@ import type { McpServer } from '@modelcontextprotocol/server'
 
 import type { PowerAutomateClient } from '../../../lib/power-automate.js'
 import { PowerAutomateError } from '../../../lib/power-automate.js'
+import { OfficeParseError } from './office.js'
+import { PdfRangeError } from './pdf.js'
 import {
   attachmentTargetSchema,
   inspectAttachmentOutputSchema,
@@ -25,7 +27,13 @@ async function guarded<T>(run: () => Promise<T>): Promise<T> {
   try {
     return await run()
   } catch (error) {
-    if (error instanceof AttachmentError || error instanceof PowerAutomateError) throw error
+    if (
+      error instanceof AttachmentError ||
+      error instanceof PowerAutomateError ||
+      error instanceof OfficeParseError ||
+      error instanceof PdfRangeError
+    )
+      throw error
     throw new AttachmentError(
       'Attachment could not be read safely: unsupported, malformed, encrypted or over parser limits',
     )
