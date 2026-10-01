@@ -16,6 +16,8 @@ export interface PowerAutomateOperations {
   list_messages: { args: { top: number } }
   search_messages: { args: { query: string; top: number } }
   get_message: { args: { messageId: string } }
+  list_attachments: { args: { messageId: string; top: number; skip: number } }
+  get_attachment: { args: { messageId: string; attachmentId: string } }
 }
 
 /** Names of the operations Power Automate implements. */
@@ -92,6 +94,8 @@ export class PowerAutomateClient {
     try {
       const response = await this.fetchFn(this.baseUrl, {
         method: 'POST',
+        // Workers supports manual/follow only. Reject 3xx below without forwarding the gateway key.
+        redirect: 'manual',
         headers: {
           'Content-Type': 'application/json',
           'X-MCP-Gateway-Key': this.gatewayKey,
@@ -101,9 +105,11 @@ export class PowerAutomateClient {
       })
       status = response.status
       if (!response.ok) {
+        await response.body?.cancel()
         throw new PowerAutomateError(`${operation} failed with HTTP status ${response.status}`)
       }
-      const body: unknown = await response.json()
+      // Bound bytes before JSON parsing; Content-Length alone is untrusted.
+      const body: unknown = await readBoundedJson(response, signal, operation)
       const parsed = successEnvelopeSchema.safeParse(body)
       if (!parsed.success) {
         throw new PowerAutomateError(`${operation} returned an unexpected response`)
@@ -138,5 +144,51 @@ export class PowerAutomateClient {
         }),
       )
     }
+  }
+}
+
+/** Prevent a malformed/upstream response from allocating an unbounded JSON body. */
+async function readBoundedJson(
+  response: Response,
+  signal: AbortSignal,
+  operation: PowerAutomateOperation,
+): Promise<unknown> {
+  const maxBytes = operation === 'list_attachments' ? 256 * 1024 : 6 * 1024 * 1024
+  const length = Number(response.headers.get('content-length') ?? 0)
+  if (length > maxBytes) {
+    await response.body?.cancel()
+    throw new PowerAutomateError(`${operation} response exceeds the size limit`)
+  }
+  if (!response.body) throw new PowerAutomateError(`${operation} returned an empty response`)
+  const reader = response.body.getReader()
+  const chunks: Uint8Array[] = []
+  let bytes = 0
+  const abort = () => {
+    void reader.cancel().catch(() => {})
+  }
+  signal.addEventListener('abort', abort, { once: true })
+  try {
+    if (signal.aborted) throw new PowerAutomateError(`${operation} timed out`)
+    while (true) {
+      const chunk = await reader.read()
+      if (signal.aborted) throw new PowerAutomateError(`${operation} timed out`)
+      if (chunk.done) break
+      bytes += chunk.value.byteLength
+      if (bytes > maxBytes) {
+        await reader.cancel()
+        throw new PowerAutomateError(`${operation} response exceeds the size limit`)
+      }
+      chunks.push(chunk.value)
+    }
+    const data = new Uint8Array(bytes)
+    let offset = 0
+    for (const chunk of chunks) {
+      data.set(chunk, offset)
+      offset += chunk.byteLength
+    }
+    return JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(data))
+  } finally {
+    signal.removeEventListener('abort', abort)
+    reader.releaseLock()
   }
 }

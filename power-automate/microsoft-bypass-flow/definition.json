@@ -28,7 +28,9 @@
               "enum": [
                 "list_messages",
                 "get_message",
-                "search_messages"
+                "search_messages",
+                "list_attachments",
+                "get_attachment"
               ]
             },
             "requestId": {
@@ -218,6 +220,1097 @@
                   "Content-Type": "application/json"
                 },
                 "body": "@addProperty(\r\n  addProperty(\r\n    addProperty(\r\n      addProperty(\r\n        json('{}'),\r\n        'ok',\r\n        true\r\n      ),\r\n      'requestId',\r\n      triggerBody()?['requestId']\r\n    ),\r\n    'operation',\r\n    triggerBody()?['operation']\r\n  ),\r\n  'data',\r\n  body('HTTP_要求を送信します_2')\r\n)"
+              }
+            }
+          }
+        },
+        "list_attachments": {
+          "case": "list_attachments",
+          "actions": {
+            "Validate_list_attachments_request": {
+              "type": "ParseJson",
+              "runAfter": {},
+              "inputs": {
+                "content": "@triggerBody()",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "operation": {
+                      "type": "string",
+                      "enum": [
+                        "list_attachments"
+                      ]
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 36,
+                      "maxLength": 36,
+                      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+                    },
+                    "args": {
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "operation",
+                    "requestId",
+                    "args"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_list_attachments_request": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_list_attachments_request": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "The request envelope is invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_list_attachments_args": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_list_attachments_request": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@body('Validate_list_attachments_request')?['args']",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "messageId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048,
+                      "pattern": "^(?!\\.{1,2}$)[^\\s\\u0000-\\u001f\\u007f]+$(?![\\s\\S])"
+                    },
+                    "top": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 50
+                    },
+                    "skip": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 10000
+                    }
+                  },
+                  "required": [
+                    "messageId",
+                    "top",
+                    "skip"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_list_attachments_args": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_list_attachments_args": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Graph_list_attachments": {
+              "type": "OpenApiConnection",
+              "runAfter": {
+                "Validate_list_attachments_args": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "parameters": {
+                  "Uri": "@concat('https://graph.microsoft.com/v1.0/me/messages/', uriComponent(body('Validate_list_attachments_args')?['messageId']), '/attachments?$select=id,name,contentType,size,isInline&$top=', string(body('Validate_list_attachments_args')?['top']), '&$skip=', string(body('Validate_list_attachments_args')?['skip']))",
+                  "Method": "GET",
+                  "CustomHeader1": "Prefer: IdType=\"ImmutableId\"",
+                  "ContentType": "application/json"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                  "connectionName": "shared_office365",
+                  "operationId": "HttpRequest"
+                },
+                "authentication": "@parameters('$authentication')",
+                "retryPolicy": {
+                  "type": "none"
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs",
+                    "outputs"
+                  ]
+                }
+              }
+            },
+            "Error_Graph_list_attachments": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Graph_list_attachments": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 502,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "UPSTREAM_ERROR",
+                    "message": "The upstream read could not be completed."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_attachment_list": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Graph_list_attachments": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@body('Graph_list_attachments')",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "array",
+                      "maxItems": 50,
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "@odata.type": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2048,
+                            "pattern": "^(?!\\.{1,2}$)[^\\s\\u0000-\\u001f\\u007f]+$(?![\\s\\S])"
+                          },
+                          "name": {
+                            "type": "string",
+                            "maxLength": 512
+                          },
+                          "contentType": {
+                            "type": "string",
+                            "maxLength": 256
+                          },
+                          "size": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "isInline": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "@odata.type",
+                          "id",
+                          "name",
+                          "contentType",
+                          "size",
+                          "isInline"
+                        ]
+                      }
+                    },
+                    "@odata.nextLink": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "value"
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_attachment_list": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_attachment_list": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 502,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ATTACHMENT_METADATA",
+                    "message": "The upstream attachment metadata is invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Select_attachment_metadata": {
+              "type": "Select",
+              "runAfter": {
+                "Validate_attachment_list": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "from": "@body('Validate_attachment_list')?['value']",
+                "select": {
+                  "@odata.type": "@item()?['@odata.type']",
+                  "id": "@item()?['id']",
+                  "name": "@item()?['name']",
+                  "contentType": "@item()?['contentType']",
+                  "size": "@item()?['size']",
+                  "isInline": "@item()?['isInline']"
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs",
+                    "outputs"
+                  ]
+                }
+              }
+            },
+            "Error_Select_attachment_metadata": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Select_attachment_metadata": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 502,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ATTACHMENT_METADATA",
+                    "message": "The upstream attachment metadata is invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Respond_list_attachments": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Select_attachment_metadata": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "statusCode": 200,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": true,
+                  "requestId": "@triggerBody()?['requestId']",
+                  "operation": "@triggerBody()?['operation']",
+                  "data": {
+                    "value": "@body('Select_attachment_metadata')",
+                    "@odata.nextLink": "@coalesce(body('Validate_attachment_list')?['@odata.nextLink'], '')"
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "get_attachment": {
+          "case": "get_attachment",
+          "actions": {
+            "Validate_get_attachment_request": {
+              "type": "ParseJson",
+              "runAfter": {},
+              "inputs": {
+                "content": "@triggerBody()",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "operation": {
+                      "type": "string",
+                      "enum": [
+                        "get_attachment"
+                      ]
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 36,
+                      "maxLength": 36,
+                      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+                    },
+                    "args": {
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "operation",
+                    "requestId",
+                    "args"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_get_attachment_request": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_get_attachment_request": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "The request envelope is invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_get_attachment_args": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_get_attachment_request": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@body('Validate_get_attachment_request')?['args']",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "messageId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048,
+                      "pattern": "^(?!\\.{1,2}$)[^\\s\\u0000-\\u001f\\u007f]+$(?![\\s\\S])"
+                    },
+                    "attachmentId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048,
+                      "pattern": "^(?!\\.{1,2}$)[^\\s\\u0000-\\u001f\\u007f]+$(?![\\s\\S])"
+                    }
+                  },
+                  "required": [
+                    "messageId",
+                    "attachmentId"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_get_attachment_args": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_get_attachment_args": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Graph_attachment_metadata": {
+              "type": "OpenApiConnection",
+              "runAfter": {
+                "Validate_get_attachment_args": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "parameters": {
+                  "Uri": "@concat('https://graph.microsoft.com/v1.0/me/messages/', uriComponent(body('Validate_get_attachment_args')?['messageId']), '/attachments/', uriComponent(body('Validate_get_attachment_args')?['attachmentId']), '?$select=id,name,contentType,size,isInline')",
+                  "Method": "GET",
+                  "CustomHeader1": "Prefer: IdType=\"ImmutableId\"",
+                  "ContentType": "application/json"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                  "connectionName": "shared_office365",
+                  "operationId": "HttpRequest"
+                },
+                "authentication": "@parameters('$authentication')",
+                "retryPolicy": {
+                  "type": "none"
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs",
+                    "outputs"
+                  ]
+                }
+              }
+            },
+            "Error_Graph_attachment_metadata": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Graph_attachment_metadata": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 502,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "UPSTREAM_ERROR",
+                    "message": "The upstream read could not be completed."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_attachment_metadata": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Graph_attachment_metadata": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@body('Graph_attachment_metadata')",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "@odata.type": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048,
+                      "pattern": "^(?!\\.{1,2}$)[^\\s\\u0000-\\u001f\\u007f]+$(?![\\s\\S])"
+                    },
+                    "name": {
+                      "type": "string",
+                      "maxLength": 512
+                    },
+                    "contentType": {
+                      "type": "string",
+                      "maxLength": 256
+                    },
+                    "size": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "isInline": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "@odata.type",
+                    "id",
+                    "name",
+                    "contentType",
+                    "size",
+                    "isInline"
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_attachment_metadata": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_attachment_metadata": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 502,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ATTACHMENT_METADATA",
+                    "message": "The upstream attachment metadata is invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Check_attachment_identity": {
+              "type": "If",
+              "expression": {
+                "equals": [
+                  "@body('Validate_attachment_metadata')?['id']",
+                  "@body('Validate_get_attachment_args')?['attachmentId']"
+                ]
+              },
+              "actions": {
+                "Check_attachment_type": {
+                  "type": "If",
+                  "expression": {
+                    "equals": [
+                      "@body('Validate_attachment_metadata')?['@odata.type']",
+                      "#microsoft.graph.fileAttachment"
+                    ]
+                  },
+                  "actions": {
+                    "Check_attachment_size": {
+                      "type": "If",
+                      "expression": {
+                        "lessOrEquals": [
+                          "@body('Validate_attachment_metadata')?['size']",
+                          4194304
+                        ]
+                      },
+                      "actions": {
+                        "Graph_attachment_content": {
+                          "type": "OpenApiConnection",
+                          "runAfter": {},
+                          "inputs": {
+                            "parameters": {
+                              "Uri": "@concat('https://graph.microsoft.com/v1.0/me/messages/', uriComponent(body('Validate_get_attachment_args')?['messageId']), '/attachments/', uriComponent(body('Validate_get_attachment_args')?['attachmentId']))",
+                              "Method": "GET",
+                              "CustomHeader1": "Prefer: IdType=\"ImmutableId\"",
+                              "ContentType": "application/json"
+                            },
+                            "host": {
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                              "connectionName": "shared_office365",
+                              "operationId": "HttpRequest"
+                            },
+                            "authentication": "@parameters('$authentication')",
+                            "retryPolicy": {
+                              "type": "none"
+                            }
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
+                            }
+                          }
+                        },
+                        "Error_Graph_attachment_content": {
+                          "type": "Response",
+                          "kind": "Http",
+                          "runAfter": {
+                            "Graph_attachment_content": [
+                              "Failed",
+                              "TimedOut"
+                            ]
+                          },
+                          "inputs": {
+                            "statusCode": 502,
+                            "headers": {
+                              "Content-Type": "application/json",
+                              "Cache-Control": "no-store"
+                            },
+                            "body": {
+                              "ok": false,
+                              "error": {
+                                "code": "UPSTREAM_ERROR",
+                                "message": "The upstream read could not be completed."
+                              }
+                            }
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs"
+                              ]
+                            }
+                          }
+                        },
+                        "Validate_attachment_content": {
+                          "type": "ParseJson",
+                          "runAfter": {
+                            "Graph_attachment_content": [
+                              "Succeeded"
+                            ]
+                          },
+                          "inputs": {
+                            "content": "@body('Graph_attachment_content')",
+                            "schema": {
+                              "type": "object",
+                              "properties": {
+                                "@odata.type": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128,
+                                  "enum": [
+                                    "#microsoft.graph.fileAttachment"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 2048,
+                                  "pattern": "^(?!\\.{1,2}$)[^\\s\\u0000-\\u001f\\u007f]+$(?![\\s\\S])"
+                                },
+                                "name": {
+                                  "type": "string",
+                                  "maxLength": 512
+                                },
+                                "contentType": {
+                                  "type": "string",
+                                  "maxLength": 256
+                                },
+                                "size": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 4194304
+                                },
+                                "isInline": {
+                                  "type": "boolean"
+                                },
+                                "contentBytes": {
+                                  "type": "string",
+                                  "maxLength": 5592408,
+                                  "pattern": "^[A-Za-z0-9+/]*={0,2}$(?![\\s\\S])"
+                                }
+                              },
+                              "required": [
+                                "@odata.type",
+                                "id",
+                                "name",
+                                "contentType",
+                                "size",
+                                "isInline",
+                                "contentBytes"
+                              ]
+                            }
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs"
+                              ]
+                            }
+                          }
+                        },
+                        "Error_Validate_attachment_content": {
+                          "type": "Response",
+                          "kind": "Http",
+                          "runAfter": {
+                            "Validate_attachment_content": [
+                              "Failed",
+                              "TimedOut"
+                            ]
+                          },
+                          "inputs": {
+                            "statusCode": 502,
+                            "headers": {
+                              "Content-Type": "application/json",
+                              "Cache-Control": "no-store"
+                            },
+                            "body": {
+                              "ok": false,
+                              "error": {
+                                "code": "INVALID_ATTACHMENT_CONTENT",
+                                "message": "The upstream attachment content is invalid or exceeds the limit."
+                              }
+                            }
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs"
+                              ]
+                            }
+                          }
+                        },
+                        "Check_content_size_and_identity": {
+                          "type": "If",
+                          "expression": {
+                            "and": [
+                              {
+                                "lessOrEquals": [
+                                  "@sub(mul(div(length(body('Validate_attachment_content')?['contentBytes']), 4), 3), if(endsWith(body('Validate_attachment_content')?['contentBytes'], '=='), 2, if(endsWith(body('Validate_attachment_content')?['contentBytes'], '='), 1, 0)))",
+                                  4194304
+                                ]
+                              },
+                              {
+                                "equals": [
+                                  "@body('Validate_attachment_content')?['id']",
+                                  "@body('Validate_get_attachment_args')?['attachmentId']"
+                                ]
+                              },
+                              {
+                                "equals": [
+                                  "@mod(length(body('Validate_attachment_content')?['contentBytes']), 4)",
+                                  0
+                                ]
+                              }
+                            ]
+                          },
+                          "actions": {
+                            "Respond_get_attachment": {
+                              "type": "Response",
+                              "kind": "Http",
+                              "runAfter": {},
+                              "inputs": {
+                                "statusCode": 200,
+                                "headers": {
+                                  "Content-Type": "application/json",
+                                  "Cache-Control": "no-store"
+                                },
+                                "body": {
+                                  "ok": true,
+                                  "requestId": "@triggerBody()?['requestId']",
+                                  "operation": "@triggerBody()?['operation']",
+                                  "data": {
+                                    "@odata.type": "@body('Validate_attachment_content')?['@odata.type']",
+                                    "id": "@body('Validate_attachment_content')?['id']",
+                                    "name": "@body('Validate_attachment_content')?['name']",
+                                    "contentType": "@body('Validate_attachment_content')?['contentType']",
+                                    "size": "@body('Validate_attachment_content')?['size']",
+                                    "isInline": "@body('Validate_attachment_content')?['isInline']",
+                                    "contentBytes": "@body('Validate_attachment_content')?['contentBytes']"
+                                  }
+                                }
+                              },
+                              "runtimeConfiguration": {
+                                "secureData": {
+                                  "properties": [
+                                    "inputs"
+                                  ]
+                                }
+                              }
+                            }
+                          },
+                          "else": {
+                            "actions": {
+                              "Reject_attachment_content": {
+                                "type": "Response",
+                                "kind": "Http",
+                                "runAfter": {},
+                                "inputs": {
+                                  "statusCode": 502,
+                                  "headers": {
+                                    "Content-Type": "application/json",
+                                    "Cache-Control": "no-store"
+                                  },
+                                  "body": {
+                                    "ok": false,
+                                    "error": {
+                                      "code": "INVALID_ATTACHMENT_CONTENT",
+                                      "message": "The upstream attachment content is invalid or exceeds the limit."
+                                    }
+                                  }
+                                },
+                                "runtimeConfiguration": {
+                                  "secureData": {
+                                    "properties": [
+                                      "inputs"
+                                    ]
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "runAfter": {
+                            "Validate_attachment_content": [
+                              "Succeeded"
+                            ]
+                          }
+                        }
+                      },
+                      "else": {
+                        "actions": {
+                          "Reject_attachment_size": {
+                            "type": "Response",
+                            "kind": "Http",
+                            "runAfter": {},
+                            "inputs": {
+                              "statusCode": 413,
+                              "headers": {
+                                "Content-Type": "application/json",
+                                "Cache-Control": "no-store"
+                              },
+                              "body": {
+                                "ok": false,
+                                "error": {
+                                  "code": "ATTACHMENT_TOO_LARGE",
+                                  "message": "The attachment exceeds the 4 MiB limit."
+                                }
+                              }
+                            },
+                            "runtimeConfiguration": {
+                              "secureData": {
+                                "properties": [
+                                  "inputs"
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "runAfter": {}
+                    }
+                  },
+                  "else": {
+                    "actions": {
+                      "Reject_attachment_type": {
+                        "type": "Response",
+                        "kind": "Http",
+                        "runAfter": {},
+                        "inputs": {
+                          "statusCode": 415,
+                          "headers": {
+                            "Content-Type": "application/json",
+                            "Cache-Control": "no-store"
+                          },
+                          "body": {
+                            "ok": false,
+                            "error": {
+                              "code": "UNSUPPORTED_ATTACHMENT_TYPE",
+                              "message": "Only file attachments can be read."
+                            }
+                          }
+                        },
+                        "runtimeConfiguration": {
+                          "secureData": {
+                            "properties": [
+                              "inputs"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "runAfter": {}
+                }
+              },
+              "else": {
+                "actions": {
+                  "Reject_attachment_metadata": {
+                    "type": "Response",
+                    "kind": "Http",
+                    "runAfter": {},
+                    "inputs": {
+                      "statusCode": 502,
+                      "headers": {
+                        "Content-Type": "application/json",
+                        "Cache-Control": "no-store"
+                      },
+                      "body": {
+                        "ok": false,
+                        "error": {
+                          "code": "INVALID_ATTACHMENT_METADATA",
+                          "message": "The upstream attachment metadata is invalid."
+                        }
+                      }
+                    },
+                    "runtimeConfiguration": {
+                      "secureData": {
+                        "properties": [
+                          "inputs"
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              "runAfter": {
+                "Validate_attachment_metadata": [
+                  "Succeeded"
+                ]
               }
             }
           }

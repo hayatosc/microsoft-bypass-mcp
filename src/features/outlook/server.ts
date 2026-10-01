@@ -6,6 +6,7 @@
 import { McpServer } from '@modelcontextprotocol/server'
 
 import type { PowerAutomateClient } from '../../lib/power-automate.js'
+import { registerAttachmentTools } from './attachments/tools.js'
 import { normalizeMessage, normalizeMessageList } from './normalize.js'
 import {
   getMessageInputSchema,
@@ -21,6 +22,9 @@ export const TOOL_NAMES = [
   'outlook_list_messages',
   'outlook_search_messages',
   'outlook_get_message',
+  'outlook_list_attachments',
+  'outlook_inspect_attachment',
+  'outlook_read_attachment',
 ] as const
 
 /**
@@ -101,6 +105,8 @@ export function createOutlookMcpServer(client: PowerAutomateClient): McpServer {
       }
     },
   )
+
+  registerAttachmentTools(server, client)
 
   return server
 }
