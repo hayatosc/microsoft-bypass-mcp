@@ -244,8 +244,7 @@
                     "requestId": {
                       "type": "string",
                       "minLength": 36,
-                      "maxLength": 36,
-                      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+                      "maxLength": 36
                     },
                     "args": {
                       "type": "object"
@@ -298,10 +297,65 @@
                 }
               }
             },
-            "Validate_list_attachments_args": {
+            "Validate_list_attachments_request_format": {
               "type": "ParseJson",
               "runAfter": {
                 "Validate_list_attachments_request": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@and(equals(length(toLower(replace(body('Validate_list_attachments_request')?['requestId'], '-', ''))), 32), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(replace(body('Validate_list_attachments_request')?['requestId'], '-', '')), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), 'a', ''), 'b', ''), 'c', ''), 'd', ''), 'e', ''), 'f', ''), ''), equals(substring(body('Validate_list_attachments_request')?['requestId'], 8, 1), '-'), equals(substring(body('Validate_list_attachments_request')?['requestId'], 13, 1), '-'), equals(substring(body('Validate_list_attachments_request')?['requestId'], 18, 1), '-'), equals(substring(body('Validate_list_attachments_request')?['requestId'], 23, 1), '-'), equals(substring(body('Validate_list_attachments_request')?['requestId'], 14, 1), '4'), contains('89ab', toLower(substring(body('Validate_list_attachments_request')?['requestId'], 19, 1))))",
+                "schema": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_list_attachments_request_format": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_list_attachments_request_format": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "The request envelope is invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_list_attachments_args": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_list_attachments_request_format": [
                   "Succeeded"
                 ]
               },
@@ -313,8 +367,7 @@
                     "messageId": {
                       "type": "string",
                       "minLength": 1,
-                      "maxLength": 2048,
-                      "pattern": "^(?!\\.{1,2}$)[^\\s\\u0000-\\u001f\\u007f]+$(?![\\s\\S])"
+                      "maxLength": 2048
                     },
                     "top": {
                       "type": "integer",
@@ -374,10 +427,65 @@
                 }
               }
             },
+            "Validate_list_attachments_ids": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_list_attachments_args": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@and(not(equals(body('Validate_list_attachments_args')?['messageId'], '.')), not(equals(body('Validate_list_attachments_args')?['messageId'], '..')), equals(length(uriComponent(body('Validate_list_attachments_args')?['messageId'])), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(body('Validate_list_attachments_args')?['messageId']), '%0', ''), '%1', ''), '%20', ''), '%7F', ''), '%C2%85', ''), '%C2%A0', ''), '%E1%9A%80', ''), '%E2%80%80', ''), '%E2%80%81', ''), '%E2%80%82', ''), '%E2%80%83', ''), '%E2%80%84', ''), '%E2%80%85', ''), '%E2%80%86', ''), '%E2%80%87', ''), '%E2%80%88', ''), '%E2%80%89', ''), '%E2%80%8A', ''), '%E2%80%A8', ''), '%E2%80%A9', ''), '%E2%80%AF', ''), '%E2%81%9F', ''), '%E3%80%80', ''), '%EF%BB%BF', ''))))",
+                "schema": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_list_attachments_ids": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_list_attachments_ids": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
             "Graph_list_attachments": {
               "type": "OpenApiConnection",
               "runAfter": {
-                "Validate_list_attachments_args": [
+                "Validate_list_attachments_ids": [
                   "Succeeded"
                 ]
               },
@@ -456,7 +564,7 @@
                       "items": {
                         "type": "object",
                         "properties": {
-                          "@odata.type": {
+                          "@@odata.type": {
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 128
@@ -464,8 +572,7 @@
                           "id": {
                             "type": "string",
                             "minLength": 1,
-                            "maxLength": 2048,
-                            "pattern": "^(?!\\.{1,2}$)[^\\s\\u0000-\\u001f\\u007f]+$(?![\\s\\S])"
+                            "maxLength": 2048
                           },
                           "name": {
                             "type": "string",
@@ -484,7 +591,7 @@
                           }
                         },
                         "required": [
-                          "@odata.type",
+                          "@@odata.type",
                           "id",
                           "name",
                           "contentType",
@@ -493,7 +600,7 @@
                         ]
                       }
                     },
-                    "@odata.nextLink": {
+                    "@@odata.nextLink": {
                       "type": "string"
                     }
                   },
@@ -551,8 +658,8 @@
               "inputs": {
                 "from": "@body('Validate_attachment_list')?['value']",
                 "select": {
-                  "@odata.type": "@item()?['@odata.type']",
-                  "id": "@item()?['id']",
+                  "@@odata.type": "@item()?['@odata.type']",
+                  "id": "@if(and(not(equals(item()?['id'], '.')), not(equals(item()?['id'], '..')), equals(length(uriComponent(item()?['id'])), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(item()?['id']), '%0', ''), '%1', ''), '%20', ''), '%7F', ''), '%C2%85', ''), '%C2%A0', ''), '%E1%9A%80', ''), '%E2%80%80', ''), '%E2%80%81', ''), '%E2%80%82', ''), '%E2%80%83', ''), '%E2%80%84', ''), '%E2%80%85', ''), '%E2%80%86', ''), '%E2%80%87', ''), '%E2%80%88', ''), '%E2%80%89', ''), '%E2%80%8A', ''), '%E2%80%A8', ''), '%E2%80%A9', ''), '%E2%80%AF', ''), '%E2%81%9F', ''), '%E3%80%80', ''), '%EF%BB%BF', '')))), item()?['id'], null)",
                   "name": "@item()?['name']",
                   "contentType": "@item()?['contentType']",
                   "size": "@item()?['size']",
@@ -599,11 +706,102 @@
                 }
               }
             },
+            "Validate_projected_attachment_list": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Select_attachment_metadata": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@body('Select_attachment_metadata')",
+                "schema": {
+                  "type": "array",
+                  "maxItems": 50,
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "@@odata.type": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      },
+                      "id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048
+                      },
+                      "name": {
+                        "type": "string",
+                        "maxLength": 512
+                      },
+                      "contentType": {
+                        "type": "string",
+                        "maxLength": 256
+                      },
+                      "size": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "isInline": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "@@odata.type",
+                      "id",
+                      "name",
+                      "contentType",
+                      "size",
+                      "isInline"
+                    ]
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_projected_attachment_list": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_projected_attachment_list": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 502,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ATTACHMENT_METADATA",
+                    "message": "The upstream attachment metadata is invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
             "Respond_list_attachments": {
               "type": "Response",
               "kind": "Http",
               "runAfter": {
-                "Select_attachment_metadata": [
+                "Validate_projected_attachment_list": [
                   "Succeeded"
                 ]
               },
@@ -619,7 +817,7 @@
                   "operation": "@triggerBody()?['operation']",
                   "data": {
                     "value": "@body('Select_attachment_metadata')",
-                    "@odata.nextLink": "@coalesce(body('Validate_attachment_list')?['@odata.nextLink'], '')"
+                    "@@odata.nextLink": "@coalesce(body('Validate_attachment_list')?['@odata.nextLink'], '')"
                   }
                 }
               },
@@ -653,8 +851,7 @@
                     "requestId": {
                       "type": "string",
                       "minLength": 36,
-                      "maxLength": 36,
-                      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+                      "maxLength": 36
                     },
                     "args": {
                       "type": "object"
@@ -707,10 +904,65 @@
                 }
               }
             },
-            "Validate_get_attachment_args": {
+            "Validate_get_attachment_request_format": {
               "type": "ParseJson",
               "runAfter": {
                 "Validate_get_attachment_request": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@and(equals(length(toLower(replace(body('Validate_get_attachment_request')?['requestId'], '-', ''))), 32), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(replace(body('Validate_get_attachment_request')?['requestId'], '-', '')), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), 'a', ''), 'b', ''), 'c', ''), 'd', ''), 'e', ''), 'f', ''), ''), equals(substring(body('Validate_get_attachment_request')?['requestId'], 8, 1), '-'), equals(substring(body('Validate_get_attachment_request')?['requestId'], 13, 1), '-'), equals(substring(body('Validate_get_attachment_request')?['requestId'], 18, 1), '-'), equals(substring(body('Validate_get_attachment_request')?['requestId'], 23, 1), '-'), equals(substring(body('Validate_get_attachment_request')?['requestId'], 14, 1), '4'), contains('89ab', toLower(substring(body('Validate_get_attachment_request')?['requestId'], 19, 1))))",
+                "schema": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_get_attachment_request_format": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_get_attachment_request_format": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "The request envelope is invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_get_attachment_args": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_get_attachment_request_format": [
                   "Succeeded"
                 ]
               },
@@ -722,14 +974,12 @@
                     "messageId": {
                       "type": "string",
                       "minLength": 1,
-                      "maxLength": 2048,
-                      "pattern": "^(?!\\.{1,2}$)[^\\s\\u0000-\\u001f\\u007f]+$(?![\\s\\S])"
+                      "maxLength": 2048
                     },
                     "attachmentId": {
                       "type": "string",
                       "minLength": 1,
-                      "maxLength": 2048,
-                      "pattern": "^(?!\\.{1,2}$)[^\\s\\u0000-\\u001f\\u007f]+$(?![\\s\\S])"
+                      "maxLength": 2048
                     }
                   },
                   "required": [
@@ -778,10 +1028,65 @@
                 }
               }
             },
+            "Validate_get_attachment_ids": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_get_attachment_args": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@and(and(not(equals(body('Validate_get_attachment_args')?['messageId'], '.')), not(equals(body('Validate_get_attachment_args')?['messageId'], '..')), equals(length(uriComponent(body('Validate_get_attachment_args')?['messageId'])), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(body('Validate_get_attachment_args')?['messageId']), '%0', ''), '%1', ''), '%20', ''), '%7F', ''), '%C2%85', ''), '%C2%A0', ''), '%E1%9A%80', ''), '%E2%80%80', ''), '%E2%80%81', ''), '%E2%80%82', ''), '%E2%80%83', ''), '%E2%80%84', ''), '%E2%80%85', ''), '%E2%80%86', ''), '%E2%80%87', ''), '%E2%80%88', ''), '%E2%80%89', ''), '%E2%80%8A', ''), '%E2%80%A8', ''), '%E2%80%A9', ''), '%E2%80%AF', ''), '%E2%81%9F', ''), '%E3%80%80', ''), '%EF%BB%BF', '')))), and(not(equals(body('Validate_get_attachment_args')?['attachmentId'], '.')), not(equals(body('Validate_get_attachment_args')?['attachmentId'], '..')), equals(length(uriComponent(body('Validate_get_attachment_args')?['attachmentId'])), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(body('Validate_get_attachment_args')?['attachmentId']), '%0', ''), '%1', ''), '%20', ''), '%7F', ''), '%C2%85', ''), '%C2%A0', ''), '%E1%9A%80', ''), '%E2%80%80', ''), '%E2%80%81', ''), '%E2%80%82', ''), '%E2%80%83', ''), '%E2%80%84', ''), '%E2%80%85', ''), '%E2%80%86', ''), '%E2%80%87', ''), '%E2%80%88', ''), '%E2%80%89', ''), '%E2%80%8A', ''), '%E2%80%A8', ''), '%E2%80%A9', ''), '%E2%80%AF', ''), '%E2%81%9F', ''), '%E3%80%80', ''), '%EF%BB%BF', '')))))",
+                "schema": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_get_attachment_ids": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_get_attachment_ids": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
             "Graph_attachment_metadata": {
               "type": "OpenApiConnection",
               "runAfter": {
-                "Validate_get_attachment_args": [
+                "Validate_get_attachment_ids": [
                   "Succeeded"
                 ]
               },
@@ -854,7 +1159,7 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "@odata.type": {
+                    "@@odata.type": {
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 128
@@ -862,8 +1167,7 @@
                     "id": {
                       "type": "string",
                       "minLength": 1,
-                      "maxLength": 2048,
-                      "pattern": "^(?!\\.{1,2}$)[^\\s\\u0000-\\u001f\\u007f]+$(?![\\s\\S])"
+                      "maxLength": 2048
                     },
                     "name": {
                       "type": "string",
@@ -882,7 +1186,7 @@
                     }
                   },
                   "required": [
-                    "@odata.type",
+                    "@@odata.type",
                     "id",
                     "name",
                     "contentType",
@@ -1029,7 +1333,7 @@
                             "schema": {
                               "type": "object",
                               "properties": {
-                                "@odata.type": {
+                                "@@odata.type": {
                                   "type": "string",
                                   "minLength": 1,
                                   "maxLength": 128,
@@ -1040,8 +1344,7 @@
                                 "id": {
                                   "type": "string",
                                   "minLength": 1,
-                                  "maxLength": 2048,
-                                  "pattern": "^(?!\\.{1,2}$)[^\\s\\u0000-\\u001f\\u007f]+$(?![\\s\\S])"
+                                  "maxLength": 2048
                                 },
                                 "name": {
                                   "type": "string",
@@ -1061,12 +1364,11 @@
                                 },
                                 "contentBytes": {
                                   "type": "string",
-                                  "maxLength": 5592408,
-                                  "pattern": "^[A-Za-z0-9+/]*={0,2}$(?![\\s\\S])"
+                                  "maxLength": 5592408
                                 }
                               },
                               "required": [
-                                "@odata.type",
+                                "@@odata.type",
                                 "id",
                                 "name",
                                 "contentType",
@@ -1115,6 +1417,116 @@
                             }
                           }
                         },
+                        "Select_attachment_content_alphabet": {
+                          "type": "Select",
+                          "runAfter": {
+                            "Validate_attachment_content": [
+                              "Succeeded"
+                            ]
+                          },
+                          "inputs": {
+                            "from": "@chunk(body('Validate_attachment_content')?['contentBytes'], 8192)",
+                            "select": "@and(equals(uriComponent(item()), replace(replace(replace(item(), '+', '%2B'), '/', '%2F'), '=', '%3D')), not(contains(item(), '-')), not(contains(item(), '_')), not(contains(item(), '.')), not(contains(item(), '!')), not(contains(item(), '~')), not(contains(item(), '*')), not(contains(item(), '''')), not(contains(item(), '(')), not(contains(item(), ')')))"
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
+                            }
+                          }
+                        },
+                        "Error_Select_attachment_content_alphabet": {
+                          "type": "Response",
+                          "kind": "Http",
+                          "runAfter": {
+                            "Select_attachment_content_alphabet": [
+                              "Failed",
+                              "TimedOut"
+                            ]
+                          },
+                          "inputs": {
+                            "statusCode": 502,
+                            "headers": {
+                              "Content-Type": "application/json",
+                              "Cache-Control": "no-store"
+                            },
+                            "body": {
+                              "ok": false,
+                              "error": {
+                                "code": "INVALID_ATTACHMENT_CONTENT",
+                                "message": "The upstream attachment content is invalid or exceeds the limit."
+                              }
+                            }
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs"
+                              ]
+                            }
+                          }
+                        },
+                        "Validate_attachment_content_alphabet": {
+                          "type": "ParseJson",
+                          "runAfter": {
+                            "Select_attachment_content_alphabet": [
+                              "Succeeded"
+                            ]
+                          },
+                          "inputs": {
+                            "content": "@body('Select_attachment_content_alphabet')",
+                            "schema": {
+                              "type": "array",
+                              "maxItems": 683,
+                              "items": {
+                                "type": "boolean",
+                                "enum": [
+                                  true
+                                ]
+                              }
+                            }
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs"
+                              ]
+                            }
+                          }
+                        },
+                        "Error_Validate_attachment_content_alphabet": {
+                          "type": "Response",
+                          "kind": "Http",
+                          "runAfter": {
+                            "Validate_attachment_content_alphabet": [
+                              "Failed",
+                              "TimedOut"
+                            ]
+                          },
+                          "inputs": {
+                            "statusCode": 502,
+                            "headers": {
+                              "Content-Type": "application/json",
+                              "Cache-Control": "no-store"
+                            },
+                            "body": {
+                              "ok": false,
+                              "error": {
+                                "code": "INVALID_ATTACHMENT_CONTENT",
+                                "message": "The upstream attachment content is invalid or exceeds the limit."
+                              }
+                            }
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs"
+                              ]
+                            }
+                          }
+                        },
                         "Check_content_size_and_identity": {
                           "type": "If",
                           "expression": {
@@ -1136,6 +1548,12 @@
                                   "@mod(length(body('Validate_attachment_content')?['contentBytes']), 4)",
                                   0
                                 ]
+                              },
+                              {
+                                "equals": [
+                                  "@or(equals(indexOf(body('Validate_attachment_content')?['contentBytes'], '='), -1), equals(indexOf(body('Validate_attachment_content')?['contentBytes'], '='), sub(length(body('Validate_attachment_content')?['contentBytes']), if(endsWith(body('Validate_attachment_content')?['contentBytes'], '=='), 2, 1))))",
+                                  true
+                                ]
                               }
                             ]
                           },
@@ -1155,7 +1573,7 @@
                                   "requestId": "@triggerBody()?['requestId']",
                                   "operation": "@triggerBody()?['operation']",
                                   "data": {
-                                    "@odata.type": "@body('Validate_attachment_content')?['@odata.type']",
+                                    "@@odata.type": "@body('Validate_attachment_content')?['@odata.type']",
                                     "id": "@body('Validate_attachment_content')?['id']",
                                     "name": "@body('Validate_attachment_content')?['name']",
                                     "contentType": "@body('Validate_attachment_content')?['contentType']",
@@ -1205,7 +1623,7 @@
                             }
                           },
                           "runAfter": {
-                            "Validate_attachment_content": [
+                            "Validate_attachment_content_alphabet": [
                               "Succeeded"
                             ]
                           }

@@ -8,13 +8,14 @@ runtime or package importer. Static checks independently pin every network path.
 import base64
 from copy import deepcopy
 import hashlib
+import itertools
 import json
 from pathlib import Path
 import re
 import unittest
 from urllib.parse import quote
 
-from build_attachment_flow import ARGUMENTS, ATTACHMENT_OPERATIONS, BASELINE, DESTINATION, GRAPH_ROOT, ID_SCHEMA, MAIL_OPERATIONS, MAX_BYTES, build_definition
+from build_attachment_flow import ARGUMENTS, ATTACHMENT_OPERATIONS, BASELINE, BASE64_CHUNK, DESTINATION, FORBIDDEN_ID_CODEPOINTS, GRAPH_ROOT, ID_SCHEMA, MAIL_OPERATIONS, MAX_BASE64, MAX_BYTES, build_definition
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = json.loads(DESTINATION.read_text(encoding="utf-8"))
@@ -22,6 +23,11 @@ BASELINE_SOURCE = json.loads(BASELINE.read_text(encoding="utf-8"))
 ATTACHMENT_CASES = {name: SOURCE["actions"]["スイッチ"]["cases"][name] for name in ATTACHMENT_OPERATIONS}
 BASELINE_SHA256 = "688fd5a8a1e83288710e965f9597c33b99a7ff702c89c18ca571e67eb3f075d8"
 REQUEST_ID = "12345678-1234-4234-8234-123456789abc"
+WORKER_ID_PATTERN = r"^(?!\.{1,2}$)[^\s\u0000-\u001f\u007f]+$(?![\s\S])"
+
+
+def string_length(value):
+    return len(value.encode("utf-16-le", errors="surrogatepass")) // 2
 
 
 def walk(value):
@@ -67,7 +73,7 @@ def validate(value, schema):
         for item in value:
             validate(item, schema["items"])
     if kind == "string":
-        if not schema.get("minLength", 0) <= len(value) <= schema.get("maxLength", len(value)):
+        if not schema.get("minLength", 0) <= string_length(value) <= schema.get("maxLength", string_length(value)):
             raise ValueError("invalid string length")
         if "pattern" in schema and re.search(schema["pattern"], value) is None:
             raise ValueError("invalid string pattern")
@@ -84,11 +90,13 @@ class Expressions:
 
     def resolve(self, value):
         if isinstance(value, dict):
-            return {key: self.resolve(child) for key, child in value.items()}
+            return {self.resolve(key): self.resolve(child) for key, child in value.items()}
         if isinstance(value, list):
             return [self.resolve(child) for child in value]
         if not isinstance(value, str) or not value.startswith("@"):
             return value
+        if value.startswith("@@"):
+            return value[1:]
         source = value[2:-1] if value.startswith("@{") and value.endswith("}") else value[1:]
         self.tokens = []
         while source.strip():
@@ -151,7 +159,12 @@ class Expressions:
             "coalesce": lambda *values: next((value for value in values if value is not None), None),
             "equals": lambda a, b: a == b, "not": lambda value: not value,
             "and": lambda *values: all(values), "empty": lambda value: value is None or value == "" or value == [] or value == {},
-            "length": len, "div": lambda a, b: a // b, "mul": lambda a, b: a * b,
+            "or": lambda *values: any(values), "contains": lambda value, part: part in value,
+            "replace": lambda value, old, new: value.replace(old, new), "toLower": lambda value: value.lower(),
+            "substring": lambda value, start, length: value[start:start + length],
+            "indexOf": lambda value, part: value.find(part),
+            "chunk": lambda value, size: [value[index:index + size] for index in range(0, len(value), size)],
+            "length": lambda value: string_length(value) if isinstance(value, str) else len(value), "div": lambda a, b: a // b, "mul": lambda a, b: a * b,
             "sub": lambda a, b: a - b, "mod": lambda a, b: a % b, "if": lambda cond, yes, no: yes if cond else no,
             "endsWith": lambda value, suffix: value.endswith(suffix),
         }
@@ -211,7 +224,7 @@ class Flow:
         kind = action["type"]
         if kind == "ParseJson":
             content = resolve(action["inputs"]["content"])
-            validate(content, action["inputs"]["schema"])
+            validate(content, resolve(action["inputs"]["schema"]))
             self.bodies[name] = content
         elif kind == "OpenApiConnection":
             inputs = resolve(action["inputs"]["parameters"])
@@ -260,6 +273,52 @@ def get_flow(*responses, **kwargs):
 
 
 class StaticContracts(unittest.TestCase):
+    def test_power_automate_schema_and_expression_constraints(self):
+        for node in walk(SOURCE):
+            if isinstance(node, dict):
+                self.assertTrue(set(node).isdisjoint({"pattern", "patternProperties"}))
+            if isinstance(node, str) and node.startswith("@"):
+                self.assertLessEqual(string_length(node), 8192)
+        self.assertLessEqual(len(actions_in(SOURCE)), 250)
+
+    def test_format_guards_run_after_typed_bounded_schemas(self):
+        for operation in ATTACHMENT_OPERATIONS:
+            actions = ATTACHMENT_CASES[operation]["actions"]
+            envelope, request_format, args, ids = (f"Validate_{operation}_{suffix}" for suffix in ("request", "request_format", "args", "ids"))
+            self.assertEqual(actions[request_format]["runAfter"], {envelope: ["Succeeded"]})
+            self.assertEqual(actions[args]["runAfter"], {request_format: ["Succeeded"]})
+            self.assertEqual(actions[ids]["runAfter"], {args: ["Succeeded"]})
+            graph = "Graph_list_attachments" if operation == "list_attachments" else "Graph_attachment_metadata"
+            self.assertEqual(actions[graph]["runAfter"], {ids: ["Succeeded"]})
+            for name in (request_format, ids):
+                self.assertEqual(actions[name]["inputs"]["schema"], {"type": "boolean", "enum": [True]})
+        actions = ATTACHMENT_CASES["list_attachments"]["actions"]
+        self.assertEqual(actions["Validate_projected_attachment_list"]["runAfter"], {"Select_attachment_metadata": ["Succeeded"]})
+        self.assertEqual(actions["Respond_list_attachments"]["runAfter"], {"Validate_projected_attachment_list": ["Succeeded"]})
+
+    def test_content_alphabet_transforms_only_bounded_chunks(self):
+        actions = ATTACHMENT_CASES["get_attachment"]["actions"]["Check_attachment_identity"]["actions"]["Check_attachment_type"]["actions"]["Check_attachment_size"]["actions"]
+        self.assertEqual(actions["Select_attachment_content_alphabet"]["runAfter"], {"Validate_attachment_content": ["Succeeded"]})
+        self.assertEqual(actions["Select_attachment_content_alphabet"]["inputs"]["from"], f"@chunk(body('Validate_attachment_content')?['contentBytes'], {BASE64_CHUNK})")
+        self.assertNotIn("body(", actions["Select_attachment_content_alphabet"]["inputs"]["select"])
+        self.assertEqual(actions["Check_content_size_and_identity"]["runAfter"], {"Validate_attachment_content_alphabet": ["Succeeded"]})
+        self.assertEqual(actions["Validate_attachment_content"]["inputs"]["schema"]["properties"]["contentBytes"]["maxLength"], MAX_BASE64)
+        self.assertLess(BASE64_CHUNK * 12, 131072)
+
+    def test_literal_at_schema_values_and_input_keys_are_escaped(self):
+        schemas = [action["inputs"]["schema"] for action in actions_in(ATTACHMENT_CASES) if action["type"] == "ParseJson"]
+        serialized_literals = [value for schema in schemas for value in walk(schema) if isinstance(value, str) and value.startswith("@")]
+        self.assertEqual(serialized_literals, ["@@odata.type"] * 4)
+        for schema in schemas:
+            resolved = Expressions(None).resolve(schema)
+            for node in walk(resolved):
+                if isinstance(node, dict) and "required" in node:
+                    self.assertTrue(set(node["required"]) <= node["properties"].keys())
+        serialized_keys = [key for node in walk(ATTACHMENT_CASES) if isinstance(node, dict) for key in node if key.startswith("@")]
+        self.assertCountEqual(serialized_keys, ["@@odata.type"] * 6 + ["@@odata.nextLink"] * 2)
+        value = {"@@odata.type": "@@odata.type", "nested": ["@@", "@@@value"]}
+        self.assertEqual(Expressions(None).resolve(value), {"@odata.type": "@odata.type", "nested": ["@", "@@value"]})
+
     def test_generated_source_is_current_and_baseline_fixture_unchanged(self):
         self.assertEqual(SOURCE, build_definition())
         self.assertEqual(hashlib.sha256(BASELINE.read_bytes()).hexdigest(), BASELINE_SHA256)
@@ -311,7 +370,7 @@ class StaticContracts(unittest.TestCase):
         ts = (ROOT / "src/features/outlook/attachments/schema.ts").read_text(encoding="utf-8")
         compact = re.sub(r"\s+", "", re.sub(r"(?m)^\s*//.*$", "", ts))
         self.assertIn("MAX_ATTACHMENT_BYTES=4*1024*1024", compact)
-        self.assertIn("z.string().min(1).max(2048).regex(/" + ID_SCHEMA["pattern"] + "/)", compact)
+        self.assertIn("z.string().min(1).max(2048).regex(/" + WORKER_ID_PATTERN + "/)", compact)
         self.assertIn("limit:z.number().int().min(1).max(50)", compact)
         self.assertIn("offset:z.number().int().min(0).max(10000)", compact)
 
@@ -409,6 +468,101 @@ class StaticContracts(unittest.TestCase):
 
 
 class ExecutionContracts(unittest.TestCase):
+    def test_uuid_v4_format_and_type_are_rejected_before_arguments_or_graph(self):
+        invalid = [None, True, 123, [], {}, "", REQUEST_ID[:-1], REQUEST_ID + "0"]
+        invalid += [REQUEST_ID[:index] + replacement + REQUEST_ID[index + 1:] for index, replacement in (
+            (0, "-"), (0, "g"), (0, "\u0661"), (8, "0"), (13, "0"), (18, "0"), (23, "0"), (14, "5"), (19, "7"), (19, "c"), (35, "\n"),
+        )]
+        for operation in ATTACHMENT_OPERATIONS:
+            for request_id in invalid:
+                flow = Flow(operation, {})
+                flow.request["requestId"] = request_id
+                response = flow.run()
+                self.assertEqual(response["statusCode"], 400)
+                self.assertEqual(response["body"]["error"]["code"], "INVALID_REQUEST")
+                self.assertEqual(flow.calls, [])
+        for request_id in (REQUEST_ID, REQUEST_ID.upper(), "ABCDEF01-2345-4678-BABC-DEF012345678"):
+            flow = Flow("list_attachments", {"messageId": "id", "top": 1, "skip": 0}, [{"value": []}])
+            flow.request["requestId"] = request_id
+            self.assertEqual(flow.run()["statusCode"], 200)
+
+    def test_all_forbidden_id_codepoints_and_surrogates_fail_closed(self):
+        bad_ids = ["x" + chr(codepoint) + "y" for codepoint in FORBIDDEN_ID_CODEPOINTS]
+        bad_ids += [".", "..", "x\ud800y", "x\udfffy"]
+        for value in bad_ids:
+            targets = [
+                Flow("list_attachments", {"messageId": value, "top": 1, "skip": 0}),
+                Flow("get_attachment", {"messageId": value, "attachmentId": "id"}),
+                Flow("get_attachment", {"messageId": "id", "attachmentId": value}),
+            ]
+            for flow in targets:
+                response = flow.run()
+                self.assertEqual(response["statusCode"], 400)
+                self.assertEqual(response["body"]["error"]["code"], "INVALID_ARGUMENTS")
+                self.assertEqual(flow.calls, [])
+            flow = Flow("list_attachments", {"messageId": "id", "top": 1, "skip": 0}, [{"value": [metadata(id=value)]}])
+            response = flow.run()
+            self.assertEqual(response["statusCode"], 502)
+            self.assertEqual(response["body"]["error"]["code"], "INVALID_ATTACHMENT_METADATA")
+            self.assertEqual(len(flow.calls), 1)
+
+    def test_id_bounds_percent_literals_and_non_whitespace_unicode(self):
+        valid = ["x" * 2048, "\U0001f600" * 1024, "日本語-é-\u200b", "%00%1F%20%C2%A0%EF%BB%BF", "a/b?x=1#y", "...", "%0%1"]
+        for value in valid:
+            flow = Flow("get_attachment", {"messageId": value, "attachmentId": value}, [metadata(id=value), metadata(id=value, contentBytes="YWJj")])
+            self.assertEqual(flow.run()["statusCode"], 200)
+            encoded = quote(value, safe="~()*!.'-_")
+            self.assertTrue(all("messages/" + encoded + "/attachments/" + encoded in call["Uri"] for call in flow.calls))
+        for value in ("x" * 2049, "\U0001f600" * 1025, None, True, 123, [], {}):
+            flow = Flow("get_attachment", {"messageId": "id", "attachmentId": value})
+            self.assertEqual(flow.run()["statusCode"], 400)
+            self.assertEqual(flow.calls, [])
+            self.assertEqual(flow.status[f"Validate_get_attachment_ids"], "Skipped")
+
+    def test_base64_short_alphabet_and_padding_combinations(self):
+        for length in range(5):
+            for chars in itertools.product("A+/=_", repeat=length):
+                content = "".join(chars)
+                valid = re.fullmatch(r"[A-Za-z0-9+/]*={0,2}", content) is not None and len(content) % 4 == 0
+                response = get_flow(metadata(), metadata(contentBytes=content)).run()
+                self.assertEqual(response["statusCode"], 200 if valid else 502, repr(content))
+
+    def test_base64_ascii_unicode_types_and_chunk_boundaries(self):
+        for character in [chr(value) for value in range(128)] + ["é", "\u200b", "\u2028", "\ufeff", "\U0001f600", "\ud800"]:
+            content = "AA" + character + "A"
+            valid = character in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+            self.assertEqual(get_flow(metadata(), metadata(contentBytes=content)).run()["statusCode"], 200 if valid else 502, repr(character))
+        for content in (None, True, 123, [], {}, "A" * (MAX_BASE64 + 1)):
+            flow = get_flow(metadata(), metadata(contentBytes=content))
+            self.assertEqual(flow.run()["statusCode"], 502)
+            self.assertEqual(flow.status["Select_attachment_content_alphabet"], "Skipped")
+        for offset in (BASE64_CHUNK - 1, BASE64_CHUNK, BASE64_CHUNK + 1, BASE64_CHUNK * 2 - 1):
+            content = "A" * offset + "_" + "A" * (BASE64_CHUNK * 2 - offset - 1)
+            self.assertEqual(get_flow(metadata(), metadata(contentBytes=content)).run()["statusCode"], 502)
+
+    def test_exact_maximum_content_with_heavy_uri_escaping(self):
+        for byte in (0xFF, 0xFB):
+            encoded = base64.b64encode(bytes([byte]) * MAX_BYTES).decode("ascii")
+            flow = get_flow(metadata(size=MAX_BYTES), metadata(size=MAX_BYTES, contentBytes=encoded))
+            self.assertEqual(flow.run()["statusCode"], 200)
+            chunks = flow.bodies["Select_attachment_content_alphabet"]
+            self.assertTrue(all(value is True for value in chunks))
+            self.assertLessEqual(len(chunks), (MAX_BASE64 + BASE64_CHUNK - 1) // BASE64_CHUNK)
+
+    def test_escaped_metadata_type_remains_required_at_every_parse_gate(self):
+        missing_type = metadata()
+        del missing_type["@odata.type"]
+        flows = [
+            (Flow("list_attachments", {"messageId": "message-id", "top": 1, "skip": 0}, [{"value": [missing_type]}]), "INVALID_ATTACHMENT_METADATA", 1),
+            (get_flow(missing_type), "INVALID_ATTACHMENT_METADATA", 1),
+            (get_flow(metadata(), dict(missing_type, contentBytes="YWJj")), "INVALID_ATTACHMENT_CONTENT", 2),
+        ]
+        for flow, code, calls in flows:
+            response = flow.run()
+            self.assertEqual(response["statusCode"], 502)
+            self.assertEqual(response["body"]["error"]["code"], code)
+            self.assertEqual(len(flow.calls), calls)
+
     def test_gateway_fails_closed(self):
         for configured, supplied in [("", ""), ("", None), ("synthetic-test-only-key", None), ("synthetic-test-only-key", "wrong")]:
             flow = Flow("list_messages", {"top": 1})
