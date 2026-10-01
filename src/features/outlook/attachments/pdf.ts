@@ -564,11 +564,12 @@ async function withPdf<T>(
       pdfBug: false,
     }
     loading = pdfjs.getDocument(parameters)
+    // Explicit awaits keep rejected promises owned by their callers in workerd.
     const work = async () => {
       const pdf = await loading?.promise
       if (!pdf || !Number.isInteger(pdf.numPages) || pdf.numPages < 1 || pdf.numPages > MAX_PAGES)
         invalid()
-      return operation(pdf)
+      return await operation(pdf)
     }
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => reject(new Error(UNSUPPORTED)), TIMEOUT_MS)
@@ -584,7 +585,7 @@ async function withPdf<T>(
 }
 
 export async function inspectPdf(bytes: Uint8Array): Promise<{ pageCount: number }> {
-  return withPdf(bytes, async (pdf) => ({ pageCount: pdf.numPages }))
+  return await withPdf(bytes, async (pdf) => ({ pageCount: pdf.numPages }))
 }
 
 export interface ReadPdfOptions {
@@ -616,7 +617,7 @@ export async function readPdf(bytes: Uint8Array, options: ReadPdfOptions = {}): 
     maxCharacters > MAX_CHARACTERS
   )
     invalid()
-  return withPdf(bytes, async (pdf) => {
+  return await withPdf(bytes, async (pdf) => {
     const pageEnd = options.pageEnd ?? Math.min(pdf.numPages, pageStart + MAX_READ_PAGES - 1)
     if (
       !Number.isInteger(pageEnd) ||

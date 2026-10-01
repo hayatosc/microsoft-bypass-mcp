@@ -107,19 +107,21 @@ before an authorized production rollout. No Worker settings are changed here.
 
 ## Flow setup and verification
 
-Use the [new authored source definition](../power-automate/attachment-reader-flow/README.md).
-It adds two fixed operations, metadata-only list projection, file type/size
-preflight, encoded path segments and sanitized error responses. The original
-exported source remains unchanged. The JSON is reviewable source, not an
-importable ZIP or Dataverse solution. Configure credentials and connection bindings
-privately; the blank SecureString gateway parameter deliberately fails closed.
+Use the [canonical existing-flow definition and in-place update procedure](../power-automate/microsoft-bypass-flow/README.md).
+The same HTTP trigger and operation switch retain the existing three mail branches
+and add two attachment branches, with metadata-only list projection, file type/size
+preflight, encoded path segments and sanitized attachment errors. There is no
+parallel replacement flow. The JSON is reviewable source, not an importable ZIP or
+Dataverse solution. Preserve the existing private connection and gateway setup;
+the public blank SecureString parameter deliberately fails closed. Verify the
+callback URL privately after an authorized save rather than assuming continuity.
 
-Offline checks use synthetic small PDF/DOCX/XLSX documents, malformed files and
-size-limit attacks. `bun run test:worker` bundles the production app and exercises
-all six tools and the three formats in real workerd with a mocked flow. Unexpected
-parser network requests fail the smoke test. It does not contact Graph, invoke a
-live flow, persist mail, or deploy anything. The authored Power Automate expressions
-have structural/contract tests, not an execution in Microsoft's service.
+Offline checks use synthetic PDF/DOCX/XLSX documents, malformed files and size-limit
+attacks. `bun run test` uses the official Cloudflare Workers Vitest integration
+(`@cloudflare/vitest-plugin`) for Hono `app.request`, MCP tool calls, and file
+parsers with mocked flow responses. They do not contact Graph, invoke a live flow, persist
+mail, or deploy anything. Power Automate tests check the source contract, including
+exact legacy-mail compatibility, without executing Microsoft's service.
 
 ```sh
 bun install --frozen-lockfile
@@ -129,7 +131,6 @@ bun run lint:types
 bun run format:check
 bun run test
 bun run test:flow
-bun run test:worker
 ```
 
 Parser packages: [unpdf](https://github.com/unjs/unpdf) (serverless PDF.js build),

@@ -135,9 +135,10 @@ original three message operations reflect the verified existing flow shape.
 The two attachment operations are an authored extension, verified only with
 offline tests: no live import, flow invocation, or mailbox run has been performed.
 
-A [sanitized snapshot of the exported flow](power-automate/microsoft-bypass-flow/README.md)
-is tracked in this repository. That folder documents source provenance, private
-configuration requirements, and observed differences from this intended contract.
+The [canonical existing-flow definition](power-automate/microsoft-bypass-flow/README.md)
+extends the sanitized export in place, preserving its three mail branches and
+adding two attachment branches to the same switch. That folder documents provenance,
+private configuration, the in-place update procedure, and preserved mail quirks.
 
 ### Request body
 
@@ -200,9 +201,10 @@ mismatch is surfaced as a tool error.
 Non-2xx (e.g. `400` on schema mismatch, `502` on upstream Graph failure) with a
 body of the shape `{ "error": { "code", "message", ... } }`.
 
-The exported snapshot has two known differences: missing `messageId` returns
+The existing mail branches retain two known differences: missing `messageId` returns
 HTTP 200 with `ok: false`, and upstream failures have no explicit error-response
-action. These behaviors are preserved in source and documented with the snapshot.
+action. These behaviors remain unchanged in the extended canonical source. The
+new attachment branches alone add strict validation and sanitized failure responses.
 
 The MCP server is responsible for **normalizing** `data` into the tool output
 schemas (§8). Non-2xx responses and malformed payloads are surfaced as tool
@@ -273,8 +275,8 @@ XLSX file attachments are eligible; reference/item attachments and external link
 are never fetched. All attachment-derived content is untrusted.
 
 See [the full attachment contract and limits](docs/attachments.md) and
-[the authored flow source](power-automate/attachment-reader-flow/README.md).
-This extension does not change the provenance of the original exported snapshot.
+[the existing-flow update](power-automate/microsoft-bypass-flow/README.md).
+The unchanged sanitized baseline is a regression fixture, not a second flow.
 
 ### Normalized message shapes
 
@@ -373,9 +375,11 @@ For `list_messages`, `search_messages`, `get_message`, verify:
 - timeout.
 
 Attachment tests cover synthetic PDF/DOCX/XLSX bytes, malformed inputs, range and
-expansion limits, and provenance. `bun run test:worker` bundles the production app
-in workerd and exercises all six tools with a mocked flow; CI includes this test.
-The authored flow has offline schema, expression, routing, and redaction checks.
+expansion limits, and provenance. The existing Vitest command uses the official
+`@cloudflare/vitest-plugin` integration configured from `wrangler.jsonc`; Hono
+`app.request` and MCP in-memory tests use mocked flow responses and real synthetic
+file fixtures. Flow tests cover operation schemas, expressions, routing, redaction,
+and exact preservation of the legacy mail branches; they do not execute Microsoft's runtime.
 
 ### Integration test
 

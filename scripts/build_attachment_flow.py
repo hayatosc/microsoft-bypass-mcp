@@ -1,7 +1,7 @@
-"""Build the review-only attachment flow source; never contacts Power Automate.
+"""Extend the existing flow source in place; never contacts Power Automate.
 
-This is authored Workflow Definition Language, not a sanitized live export.
-The original snapshot is read for its connector and gateway contract, not edited.
+The frozen sanitized export is a compatibility fixture, not a second flow.
+Only the operation allowlist and two attachment cases are added to that baseline.
 """
 
 from copy import deepcopy
@@ -10,8 +10,10 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-SNAPSHOT = ROOT / "power-automate/microsoft-bypass-flow/definition.json"
-DESTINATION = ROOT / "power-automate/attachment-reader-flow/definition.json"
+BASELINE = ROOT / "scripts/fixtures/microsoft-bypass-flow.pre-attachments.json"
+DESTINATION = ROOT / "power-automate/microsoft-bypass-flow/definition.json"
+MAIL_OPERATIONS = ("list_messages", "get_message", "search_messages")
+ATTACHMENT_OPERATIONS = ("list_attachments", "get_attachment")
 MAX_BYTES = 4 * 1024 * 1024
 MAX_BASE64 = ((MAX_BYTES + 2) // 3) * 4
 METADATA_FIELDS = ["@odata.type", "id", "name", "contentType", "size", "isInline"]
@@ -68,8 +70,8 @@ def error(status, code, message, run_after=None):
 def success(data, run_after=None):
     return response(200, {
         "ok": True,
-        "requestId": "@body('Validate_request')?['requestId']",
-        "operation": "@body('Validate_request')?['operation']",
+        "requestId": "@triggerBody()?['requestId']",
+        "operation": "@triggerBody()?['operation']",
         "data": data,
     }, run_after)
 
@@ -78,13 +80,11 @@ def parse(content, schema, run_after=None):
     return secure({"type": "ParseJson", "runAfter": run_after or {}, "inputs": {"content": content, "schema": deepcopy(schema)}})
 
 
-def graph(uri, run_after=None, *, text_body=False):
+def graph(uri, run_after=None):
     parameters = {
         "Uri": uri, "Method": "GET", "CustomHeader1": 'Prefer: IdType="ImmutableId"',
         "ContentType": "application/json",
     }
-    if text_body:
-        parameters["CustomHeader2"] = 'Prefer: outlook.body-content-type="text"'
     return secure({
         "type": "OpenApiConnection", "runAfter": run_after or {},
         "inputs": {
@@ -116,8 +116,18 @@ def projection(action):
 
 
 def request_args(operation):
+    # Validate only inside the new cases. A global validator would tighten the
+    # legacy mail contract (optional top, arbitrary string requestId, etc.).
+    envelope = f"Validate_{operation}_request"
+    envelope_schema = object_schema({
+        "operation": {"type": "string", "enum": [operation]},
+        "requestId": {"type": "string", "minLength": 36, "maxLength": 36, "pattern": r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"},
+        "args": {"type": "object"},
+    }, strict=True)
+    actions = {envelope: parse("@triggerBody()", envelope_schema)}
+    failure(actions, envelope, status=400, code="INVALID_REQUEST", message="The request envelope is invalid.")
     name = f"Validate_{operation}_args"
-    actions = {name: parse("@body('Validate_request')?['args']", object_schema(ARGUMENTS[operation], strict=True))}
+    actions[name] = parse(f"@body('{envelope}')?['args']", object_schema(ARGUMENTS[operation], strict=True), after(envelope))
     failure(actions, name, status=400, code="INVALID_ARGUMENTS", message="The operation arguments are invalid.")
     return name, actions
 
@@ -131,32 +141,6 @@ def metadata_schema():
         "size": {"type": "integer", "minimum": 0},
         "isInline": {"type": "boolean"},
     })
-
-
-def message_case(operation, snapshot):
-    validate, actions = request_args(operation)
-    old_case = snapshot["actions"]["スイッチ"]["cases"][operation]
-
-    def find_request(value):
-        if isinstance(value, dict):
-            if value.get("type") == "OpenApiConnection":
-                return value
-            for child in value.values():
-                found = find_request(child)
-                if found:
-                    return found
-        return None
-
-    # Preserve all legacy Graph selections, inbox scope, encoded IDs/search,
-    # and Prefer headers. Arguments now come from explicit validated bodies.
-    original = find_request(old_case)
-    uri = original["inputs"]["parameters"]["Uri"]
-    uri = uri.replace("triggerBody()?['args']", f"body('{validate}')")
-    name = f"Graph_{operation}"
-    actions[name] = graph(uri, after(validate), text_body=operation == "get_message")
-    failure(actions, name)
-    actions[f"Respond_{operation}"] = success(f"@body('{name}')", after(name))
-    return {"case": operation, "actions": actions}
 
 
 def list_case():
@@ -238,40 +222,24 @@ def get_case():
 
 
 def build_definition():
-    snapshot = json.loads(SNAPSHOT.read_text(encoding="utf-8"))
-    envelope_schema = object_schema({
-        "operation": {"type": "string", "enum": list(ARGUMENTS)},
-        "requestId": {"type": "string", "minLength": 36, "maxLength": 36, "pattern": r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"},
-        "args": {"type": "object"},
-    }, strict=True)
-    manual = deepcopy(snapshot["triggers"]["manual"])
-    # Runtime ParseJson (rather than an early trigger schema failure) lets bad
-    # request shapes receive our fixed 400 body. The gateway remains fail-closed.
-    manual["inputs"]["schema"] = {}
-    secure(manual)
-    actions = {"Validate_request": parse("@triggerBody()", envelope_schema)}
-    failure(actions, "Validate_request", status=400, code="INVALID_REQUEST", message="The request envelope is invalid.")
-    cases = {name: message_case(name, snapshot) for name in ("list_messages", "search_messages", "get_message")}
+    definition = json.loads(BASELINE.read_text(encoding="utf-8"))
+    # Preserve the existing HTTP trigger, auth guard, connection parameters,
+    # switch/default and complete mail branches, including exported quirks.
+    # Attachment-only argument validation belongs in the new cases below;
+    # no global schema fields or strictness are changed for legacy mail calls.
+    operation_schema = definition["triggers"]["manual"]["inputs"]["schema"]["properties"]["operation"]
+    operation_schema["enum"].extend(ATTACHMENT_OPERATIONS)
+    cases = definition["actions"]["スイッチ"]["cases"]
     cases["list_attachments"] = list_case()
     cases["get_attachment"] = get_case()
-    actions["Route_operation"] = {
-        "type": "Switch", "runAfter": after("Validate_request"),
-        "expression": "@body('Validate_request')?['operation']", "cases": cases,
-        "default": {"actions": {"Reject_operation": error(400, "INVALID_OPERATION", "The operation is not supported.")}},
-    }
-    return {
-        "$schema": snapshot["$schema"], "contentVersion": "1.0.0.0",
-        "parameters": deepcopy(snapshot["parameters"]), "triggers": {"manual": manual},
-        "actions": actions,
-        "description": "Authored read-only attachment extension source. Not a live export or an importable package.",
-    }
+    return definition
 
 
 def main():
     rendered = json.dumps(build_definition(), ensure_ascii=False, indent=2) + "\n"
     if "--check" in sys.argv:
         if not DESTINATION.exists() or DESTINATION.read_text(encoding="utf-8") != rendered:
-            raise SystemExit("Attachment flow source is stale; run scripts/build_attachment_flow.py.")
+            raise SystemExit("Existing flow source is stale; run scripts/build_attachment_flow.py.")
     elif len(sys.argv) == 1:
         DESTINATION.parent.mkdir(parents=True, exist_ok=True)
         DESTINATION.write_text(rendered, encoding="utf-8")

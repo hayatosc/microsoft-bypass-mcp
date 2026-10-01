@@ -29,20 +29,25 @@ Microsoft Graph
 
 ## Power Automate source
 
-The existing cloud flow is tracked as a [sanitized source snapshot](power-automate/microsoft-bypass-flow/README.md).
-It includes the actual operation routing and Graph queries, plus redaction and
-re-export instructions. It is not an importable package.
-
-The new [attachment-reader flow source](power-automate/attachment-reader-flow/README.md)
-adds attachment operations; the Worker needs that flow extension configured before
-attachment tools work. Neither JSON is a directly importable package.
+The existing [microsoft bypass flow source](power-automate/microsoft-bypass-flow/README.md)
+is extended in place: the same HTTP trigger and operation switch retain the three
+mail branches and add attachment list/get branches. There is one canonical JSON
+at `power-automate/microsoft-bypass-flow/definition.json`, with an in-place update
+procedure for the existing flow. It is source for review, not an importable package.
+The Worker needs that existing flow updated before attachment tools work.
 See [attachment support, examples, and safety limits](docs/attachments.md).
 Parsing runs on the Worker for remote chat clients; no local helper is required.
+
+Tests use the existing Vitest workflow with Cloudflare's official
+[`@cloudflare/vitest-plugin`](https://developers.cloudflare.com/workers/testing/vitest-integration/)
+integration, configured from `wrangler.jsonc`. Hono request tests and synthetic
+attachment fixtures run through `bun run test`; there is no separate runtime-test
+script or direct Miniflare dependency.
 
 ## Requirements
 
 - Microsoftアカウント
-- [Bun](https://bun.sh) 1.3.14 and Node.js 24 for offline workerd tests
+- [Bun](https://bun.sh) 1.3.14
 - Cloudflareアカウント
 
 ## Configuration
@@ -72,7 +77,6 @@ bun run lint:types   # oxlint --type-aware
 bun run format:check # oxfmt --check
 bun run test         # vitest
 bun run test:flow    # offline flow contract tests
-bun run test:worker  # bundled production app in real workerd, synthetic documents
 ```
 
 ## Deploy

@@ -13,7 +13,7 @@ from export_power_automate import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "power-automate/microsoft-bypass-flow/definition.json"
+SOURCE = ROOT / "scripts/fixtures/microsoft-bypass-flow.pre-attachments.json"
 FAKE_KEY = "synthetic-test-only-gateway-key"
 
 

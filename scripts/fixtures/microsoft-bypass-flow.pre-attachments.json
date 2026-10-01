@@ -1,0 +1,253 @@
+{
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "undefined",
+  "parameters": {
+    "$authentication": {
+      "defaultValue": {},
+      "type": "SecureObject"
+    },
+    "$connections": {
+      "defaultValue": {},
+      "type": "Object"
+    },
+    "McpGatewayKey": {
+      "defaultValue": "",
+      "type": "SecureString"
+    }
+  },
+  "triggers": {
+    "manual": {
+      "type": "Request",
+      "kind": "Http",
+      "inputs": {
+        "schema": {
+          "type": "object",
+          "properties": {
+            "operation": {
+              "type": "string",
+              "enum": [
+                "list_messages",
+                "get_message",
+                "search_messages"
+              ]
+            },
+            "requestId": {
+              "type": "string"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 50
+                },
+                "messageId": {
+                  "type": "string"
+                },
+                "query": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "required": [
+            "operation",
+            "requestId",
+            "args"
+          ]
+        },
+        "triggerAuthenticationType": "All"
+      },
+      "conditions": [
+        {
+          "expression": "@and(not(empty(parameters('McpGatewayKey'))),equals(triggerOutputs()?['headers']?['X-MCP-Gateway-Key'],parameters('McpGatewayKey')))"
+        }
+      ]
+    }
+  },
+  "actions": {
+    "スイッチ": {
+      "runAfter": {},
+      "cases": {
+        "list_messages": {
+          "case": "list_messages",
+          "actions": {
+            "HTTP_要求を送信します": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "Uri": "@concat(\r\n  'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?$select=id,subject,from,receivedDateTime,isRead,importance,hasAttachments,bodyPreview&$orderby=receivedDateTime%20desc&$top=',\r\n  string(coalesce(triggerBody()?['args']?['top'], 20))\r\n)",
+                  "Method": "GET",
+                  "CustomHeader1": "Prefer: IdType=\"ImmutableId\"",
+                  "ContentType": "application/json"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                  "connectionName": "shared_office365",
+                  "operationId": "HttpRequest"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            },
+            "応答": {
+              "runAfter": {
+                "HTTP_要求を送信します": [
+                  "Succeeded"
+                ]
+              },
+              "type": "Response",
+              "kind": "Http",
+              "inputs": {
+                "statusCode": 200,
+                "headers": {
+                  "Content-Type": "application/json"
+                },
+                "body": "@addProperty(\r\n  addProperty(\r\n    addProperty(\r\n      addProperty(\r\n        json('{}'),\r\n        'ok',\r\n        true\r\n      ),\r\n      'requestId',\r\n      triggerBody()?['requestId']\r\n    ),\r\n    'operation',\r\n    triggerBody()?['operation']\r\n  ),\r\n  'data',\r\n  body('HTTP_要求を送信します')\r\n)"
+              }
+            }
+          }
+        },
+        "get_message": {
+          "case": "get_message",
+          "actions": {
+            "条件": {
+              "actions": {
+                "応答_4": {
+                  "type": "Response",
+                  "kind": "Http",
+                  "inputs": {
+                    "statusCode": 200,
+                    "headers": {
+                      "Content-Type": "application/json"
+                    },
+                    "body": {
+                      "ok": false,
+                      "requestId": "@{triggerBody()?['requestId']}",
+                      "error": {
+                        "code": "MISSING_MESSAGE_ID",
+                        "message": "messageId is required."
+                      }
+                    }
+                  }
+                }
+              },
+              "else": {
+                "actions": {
+                  "HTTP_要求を送信します_1": {
+                    "type": "OpenApiConnection",
+                    "inputs": {
+                      "parameters": {
+                        "Uri": "@concat(\r\n  'https://graph.microsoft.com/v1.0/me/messages/',\r\n  uriComponent(triggerBody()?['args']?['messageId']),\r\n  '?$select=id,subject,from,toRecipients,ccRecipients,receivedDateTime,isRead,importance,hasAttachments,body'\r\n)",
+                        "Method": "GET",
+                        "CustomHeader1": "Prefer: IdType=\"ImmutableId\"",
+                        "CustomHeader2": "Prefer: outlook.body-content-type=\"text\"",
+                        "ContentType": "application/json"
+                      },
+                      "host": {
+                        "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                        "connectionName": "shared_office365",
+                        "operationId": "HttpRequest"
+                      },
+                      "authentication": "@parameters('$authentication')"
+                    }
+                  },
+                  "応答_1": {
+                    "runAfter": {
+                      "HTTP_要求を送信します_1": [
+                        "Succeeded"
+                      ]
+                    },
+                    "type": "Response",
+                    "kind": "Http",
+                    "inputs": {
+                      "statusCode": 200,
+                      "headers": {
+                        "Content-Type": "application/json"
+                      },
+                      "body": "@addProperty(\r\n  addProperty(\r\n    addProperty(\r\n      addProperty(\r\n        json('{}'),\r\n        'ok',\r\n        true\r\n      ),\r\n      'requestId',\r\n      triggerBody()?['requestId']\r\n    ),\r\n    'operation',\r\n    triggerBody()?['operation']\r\n  ),\r\n  'data',\r\n  body('HTTP_要求を送信します_1')\r\n)"
+                    }
+                  }
+                }
+              },
+              "expression": {
+                "and": [
+                  {
+                    "equals": [
+                      "@empty(triggerBody()?['args']?['messageId'])",
+                      true
+                    ]
+                  }
+                ]
+              },
+              "type": "If"
+            }
+          }
+        },
+        "search_messages": {
+          "case": "search_messages",
+          "actions": {
+            "HTTP_要求を送信します_2": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "Uri": "@concat(\r\n  'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?$search=',\r\n  uriComponent(\r\n    concat(\r\n      '\"',\r\n      triggerBody()?['args']?['query'],\r\n      '\"'\r\n    )\r\n  ),\r\n  '&$select=id,subject,from,receivedDateTime,isRead,importance,hasAttachments,bodyPreview&$top=',\r\n  string(coalesce(triggerBody()?['args']?['top'], 20))\r\n)",
+                  "Method": "GET",
+                  "CustomHeader1": "Prefer: IdType=\"ImmutableId\"",
+                  "ContentType": "application/json"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                  "connectionName": "shared_office365",
+                  "operationId": "HttpRequest"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            },
+            "応答_2": {
+              "runAfter": {
+                "HTTP_要求を送信します_2": [
+                  "Succeeded"
+                ]
+              },
+              "type": "Response",
+              "kind": "Http",
+              "inputs": {
+                "statusCode": 200,
+                "headers": {
+                  "Content-Type": "application/json"
+                },
+                "body": "@addProperty(\r\n  addProperty(\r\n    addProperty(\r\n      addProperty(\r\n        json('{}'),\r\n        'ok',\r\n        true\r\n      ),\r\n      'requestId',\r\n      triggerBody()?['requestId']\r\n    ),\r\n    'operation',\r\n    triggerBody()?['operation']\r\n  ),\r\n  'data',\r\n  body('HTTP_要求を送信します_2')\r\n)"
+              }
+            }
+          }
+        }
+      },
+      "default": {
+        "actions": {
+          "応答_3": {
+            "type": "Response",
+            "kind": "Http",
+            "inputs": {
+              "statusCode": 400,
+              "headers": {
+                "Content-Type": "application/json"
+              },
+              "body": {
+                "ok": false,
+                "requestId": "@{triggerBody()?['requestId']}",
+                "error": {
+                  "code": "INVALID_OPERATION",
+                  "message": "Unsupported operation."
+                }
+              }
+            }
+          }
+        }
+      },
+      "expression": "@triggerBody()?['operation']",
+      "type": "Switch"
+    }
+  },
+  "description": ""
+}

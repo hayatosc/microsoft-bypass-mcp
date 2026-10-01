@@ -20,13 +20,12 @@ bun run lint           # oxlint
 bun run lint:types     # oxlint --type-aware
 bun run format         # oxfmt --write src
 bun run format:check   # oxfmt --check src
-bun run test           # vitest
-bun run test:worker    # offline production-bundle smoke in workerd (Node 24)
+bun run test           # Vitest with official Cloudflare Workers integration
 bun run test:flow      # offline exported-flow contract and redaction tests (Python 3)
 bun run deploy         # wrangler deploy
 ```
 
-Run `typecheck`, `lint`, `lint:types`, `format:check`, `test`, `test:flow`, and `test:worker` before
+Run `typecheck`, `lint`, `lint:types`, `format:check`, `test`, and `test:flow` before
 committing. Package manager is `bun`.
 
 ## Structure
@@ -72,8 +71,11 @@ src/
 
 ## Attachment safety
 
-- Keep the original exported flow snapshot unchanged; update the authored attachment
-  extension with `python3 scripts/build_attachment_flow.py`. Never commit raw exports.
+- Evolve `power-automate/microsoft-bypass-flow/definition.json` as the single flow
+  source. Keep the sanitized pre-attachment fixture in `scripts/fixtures/` unchanged;
+  regenerate the canonical definition with `python3 scripts/build_attachment_flow.py`.
+  Preserve the existing mail branches, trigger/auth, and connector contract. Never
+  commit raw exports or introduce a parallel replacement flow.
 - Keep attachment bytes request-local. Never expose base64 or raw Graph objects to MCP.
 - Enforce transport, raw-file, expanded-byte, XML, page/cell and output limits before
   trusting parser results. Reject unsupported PDF/OOXML constructs rather than
