@@ -284,6 +284,31 @@ interface StreamBudget {
   mappingBytes: number
 }
 
+/** A closed diagnostic map; never reflect an arbitrary filter name or value. */
+function unsupportedFilterCode(filter: Value): PdfDiagnosticCode {
+  if (isReference(filter)) return 'PDF_FILTER_INDIRECT'
+  if (Array.isArray(filter)) {
+    if (filter.length !== 1) return 'PDF_FILTER_CHAIN'
+    const item = filter[0]
+    return item === undefined ? 'PDF_STREAM_FILTER' : unsupportedFilterNameCode(item)
+  }
+  return unsupportedFilterNameCode(filter)
+}
+function unsupportedFilterNameCode(filter: Value): PdfDiagnosticCode {
+  if (isReference(filter)) return 'PDF_FILTER_INDIRECT'
+  if (named(filter, 'DCTDecode') || named(filter, 'DCT')) return 'PDF_FILTER_DCT'
+  if (named(filter, 'JPXDecode')) return 'PDF_FILTER_JPX'
+  if (named(filter, 'JBIG2Decode')) return 'PDF_FILTER_JBIG2'
+  if (named(filter, 'CCITTFaxDecode') || named(filter, 'CCF')) return 'PDF_FILTER_CCITT'
+  if (named(filter, 'LZWDecode') || named(filter, 'LZW')) return 'PDF_FILTER_LZW'
+  if (named(filter, 'ASCII85Decode') || named(filter, 'A85')) return 'PDF_FILTER_ASCII85'
+  if (named(filter, 'ASCIIHexDecode') || named(filter, 'AHx')) return 'PDF_FILTER_ASCIIHEX'
+  if (named(filter, 'RunLengthDecode') || named(filter, 'RL')) return 'PDF_FILTER_RUNLENGTH'
+  if (named(filter, 'Crypt')) return 'PDF_FILTER_CRYPT'
+  if (named(filter, 'Fl')) return 'PDF_FILTER_FLATE_ALIAS'
+  return 'PDF_STREAM_FILTER'
+}
+
 function checkStream(bytes: Uint8Array, dictionary: Dictionary, budget: StreamBudget): number {
   const filter = dictionary.entries.get('Filter')
   const parameters = dictionary.entries.get('DecodeParms')
@@ -292,7 +317,7 @@ function checkStream(bytes: Uint8Array, dictionary: Dictionary, budget: StreamBu
   const flate =
     named(filter, 'FlateDecode') ||
     (Array.isArray(filter) && filter.length === 1 && named(filter[0], 'FlateDecode'))
-  if (filter !== undefined && filter !== null && !flate) invalid('PDF_STREAM_FILTER')
+  if (filter !== undefined && filter !== null && !flate) invalid(unsupportedFilterCode(filter))
   let size = 0
   let tail = ''
   const parts: string[] = []

@@ -78,7 +78,7 @@ parser support has been added. Existing selector errors are unchanged.
 | `PDF_STREAM_BOUNDS` | Stream extends beyond file bytes |
 | `PDF_STREAM_DICTIONARY` | Invalid stream dictionary or buffered stream tokens |
 | `PDF_STREAM_EXPANSION` | Per-stream or aggregate expanded-byte limit exceeded |
-| `PDF_STREAM_FILTER` | Unsupported stream filter |
+| `PDF_STREAM_FILTER` | Other unsupported stream filter value |
 | `PDF_STREAM_LENGTH` | Invalid direct stream length |
 | `PDF_STREAM_NEWLINE` | Missing supported newline before stream bytes |
 | `PDF_STRING_DEPTH` | String nesting limit exceeded |
@@ -104,6 +104,22 @@ parser support has been added. Existing selector errors are unchanged.
 | `PDF_XREF_ENTRY` | Cross-reference generation, uniqueness, or offset mismatch |
 | `PDF_XREF_STATE` | Unsupported cross-reference entry state |
 | `PDF_XREF_STREAM` | Cross-reference streams unsupported |
+| `PDF_FILTER_ASCII85` | ASCII85Decode stream filter or A85 alias unsupported |
+| `PDF_FILTER_ASCIIHEX` | ASCIIHexDecode stream filter or AHx alias unsupported |
+| `PDF_FILTER_CCITT` | CCITTFaxDecode stream filter or CCF alias unsupported |
+| `PDF_FILTER_CHAIN` | Empty or multiple-entry stream filter array unsupported |
+| `PDF_FILTER_CRYPT` | Crypt stream filter unsupported |
+| `PDF_FILTER_DCT` | DCTDecode (JPEG) stream filter or DCT alias unsupported |
+| `PDF_FILTER_FLATE_ALIAS` | Fl abbreviation unsupported (full FlateDecode required) |
+| `PDF_FILTER_INDIRECT` | Indirect stream filter or filter-array member unsupported |
+| `PDF_FILTER_JBIG2` | JBIG2Decode stream filter unsupported |
+| `PDF_FILTER_JPX` | JPXDecode (JPEG 2000) stream filter unsupported |
+| `PDF_FILTER_LZW` | LZWDecode stream filter or LZW alias unsupported |
+| `PDF_FILTER_RUNLENGTH` | RunLengthDecode stream filter or RL alias unsupported |
+
+A known filter code can describe a direct name or a one-element filter array.
+Multiple/empty arrays and indirect filters use fixed shape codes. Unknown values
+stay generic; no arbitrary filter names or document values are returned.
 
 ## Operational use after separately authorized publication
 
