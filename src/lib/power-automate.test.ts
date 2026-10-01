@@ -252,6 +252,7 @@ describe('PowerAutomateClient', () => {
     expect(call?.[0]).toBe('https://example.test/flow')
     const headers = new Headers(call?.[1]?.headers)
     expect(headers.get('X-MCP-Gateway-Key')).toBe('test-gateway-key')
+    expect(call?.[1]?.redirect).toBe('manual')
     const body = call?.[1]?.body
     if (typeof body !== 'string') throw new Error('expected a string request body')
     const parsed = requestSchema.parse(JSON.parse(body))
@@ -274,5 +275,76 @@ describe('PowerAutomateClient', () => {
     await expect(client.call('list_messages', { top: 5 })).rejects.toThrow(
       'list_messages timed out',
     )
+  })
+  it('rejects oversized Content-Length without reading the response', async () => {
+    const cancel = vi.fn()
+    const fetchFn: typeof fetch = async () =>
+      new Response(new ReadableStream({ cancel }), {
+        headers: { 'Content-Length': String(7 * 1024 * 1024) },
+      })
+    const client = new PowerAutomateClient({
+      baseUrl: 'https://example.test',
+      gatewayKey: 'test',
+      fetchFn,
+    })
+    await expect(
+      client.call('get_attachment', { messageId: 'message', attachmentId: 'attachment' }),
+    ).rejects.toThrow('size limit')
+    expect(cancel).toHaveBeenCalledOnce()
+  })
+  it('caps bytes even without a truthful Content-Length', async () => {
+    const cancel = vi.fn()
+    const fetchFn: typeof fetch = async () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new Uint8Array(256 * 1024 + 1))
+          },
+          cancel,
+        }),
+        { headers: { 'Content-Length': '1' } },
+      )
+    const client = new PowerAutomateClient({
+      baseUrl: 'https://example.test',
+      gatewayKey: 'test',
+      fetchFn,
+    })
+    await expect(
+      client.call('list_attachments', { messageId: 'message', top: 1, skip: 0 }),
+    ).rejects.toThrow('size limit')
+    expect(cancel).toHaveBeenCalledOnce()
+  })
+  it('bounds stalled response-body reads with the same request timeout', async () => {
+    const cancel = vi.fn()
+    const fetchFn: typeof fetch = async () => new Response(new ReadableStream({ cancel }))
+    const client = new PowerAutomateClient({
+      baseUrl: 'https://example.test',
+      gatewayKey: 'test',
+      fetchFn,
+      timeoutMs: 20,
+    })
+    await expect(
+      client.call('list_attachments', { messageId: 'message', top: 1, skip: 0 }),
+    ).rejects.toThrow('timed out')
+    expect(cancel).toHaveBeenCalledOnce()
+  })
+  it('rejects upstream redirects without forwarding gateway credentials', async () => {
+    const fetchFn = vi.fn<typeof fetch>(
+      async () =>
+        new Response(null, {
+          status: 302,
+          headers: { Location: 'https://untrusted.example.test/' },
+        }),
+    )
+    const client = new PowerAutomateClient({
+      baseUrl: 'https://flow.example.test',
+      gatewayKey: 'test',
+      fetchFn,
+    })
+    await expect(
+      client.call('list_attachments', { messageId: 'message', top: 1, skip: 0 }),
+    ).rejects.toThrow('HTTP status 302')
+    expect(fetchFn).toHaveBeenCalledOnce()
+    expect(fetchFn.mock.calls[0]?.[1]?.redirect).toBe('manual')
   })
 })

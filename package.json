@@ -11,17 +11,23 @@
     "format:check": "oxfmt --check src",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:flow": "python3 -m unittest discover -s scripts -p \"test_*.py\""
+    "test:flow": "python3 -m unittest discover -s scripts -p \"test_*.py\"",
+    "test:worker": "node scripts/test-worker.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "^2.0.0",
+    "fflate": "^0.8.3",
     "hono": "^4.13.1",
     "jose": "^6.2.8",
+    "saxes": "^6.0.0",
+    "unpdf": "^1.8.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250804.0",
     "@modelcontextprotocol/client": "^2.0.0",
+    "esbuild": "0.28.1",
+    "miniflare": "5.20260811.0-alpha",
     "oxfmt": "^0.63.0",
     "oxlint": "^1.78.0",
     "oxlint-tsgolint": "^7.0.2001",

@@ -23,6 +23,9 @@ Microsoft Graph
 | `outlook_list_messages` | `{ limit?: number }` (default 5, 1–50) | `{ messages: MessageSummary[], hasMore: boolean }` |
 | `outlook_search_messages` | `{ query: string, limit?: number }` (default 10, 1–50) | `{ messages: MessageSummary[], hasMore: boolean }` |
 | `outlook_get_message` | `{ messageId: string }` | `MessageDetail` |
+| `outlook_list_attachments` | `{ messageId, limit?, offset? }` | Metadata + next offset |
+| `outlook_inspect_attachment` | `{ messageId, attachmentId }` | PDF pages, DOCX sections or XLSX sheets |
+| `outlook_read_attachment` | `{ messageId, attachmentId, selection }` | Bounded content with source provenance |
 
 ## Power Automate source
 
@@ -30,10 +33,16 @@ The existing cloud flow is tracked as a [sanitized source snapshot](power-automa
 It includes the actual operation routing and Graph queries, plus redaction and
 re-export instructions. It is not an importable package.
 
+The new [attachment-reader flow source](power-automate/attachment-reader-flow/README.md)
+adds attachment operations; the Worker needs that flow extension configured before
+attachment tools work. Neither JSON is a directly importable package.
+See [attachment support, examples, and safety limits](docs/attachments.md).
+Parsing runs on the Worker for remote chat clients; no local helper is required.
+
 ## Requirements
 
 - Microsoftアカウント
-- [Bun](https://bun.sh)
+- [Bun](https://bun.sh) 1.3.14 and Node.js 24 for offline workerd tests
 - Cloudflareアカウント
 
 ## Configuration
@@ -62,6 +71,8 @@ bun run lint         # oxlint
 bun run lint:types   # oxlint --type-aware
 bun run format:check # oxfmt --check
 bun run test         # vitest
+bun run test:flow    # offline flow contract tests
+bun run test:worker  # bundled production app in real workerd, synthetic documents
 ```
 
 ## Deploy

@@ -5,7 +5,7 @@
 University Microsoft 365 Read-only MCP — a read-only [Model Context Protocol](https://modelcontextprotocol.io)
 server (Cloudflare Workers + Hono) exposing read tools for university Microsoft
 365 resources through a Power Automate HTTP-trigger intermediary. The current
-implementation covers the Outlook mailbox (three tools); other Microsoft 365
+implementation covers the Outlook mailbox (six tools); other Microsoft 365
 apps (Teams, OneDrive, etc.) are added as new features. See
 [`SPEC.md`](./SPEC.md) for the authoritative specification and
 [`README.md`](./README.md) for a summary.
@@ -21,11 +21,12 @@ bun run lint:types     # oxlint --type-aware
 bun run format         # oxfmt --write src
 bun run format:check   # oxfmt --check src
 bun run test           # vitest
+bun run test:worker    # offline production-bundle smoke in workerd (Node 24)
 bun run test:flow      # offline exported-flow contract and redaction tests (Python 3)
 bun run deploy         # wrangler deploy
 ```
 
-Run `typecheck`, `lint`, `lint:types`, `format:check`, `test`, and `test:flow` before
+Run `typecheck`, `lint`, `lint:types`, `format:check`, `test`, `test:flow`, and `test:worker` before
 committing. Package manager is `bun`.
 
 ## Structure
@@ -38,15 +39,16 @@ src/
   lib/access-auth.ts       # Cloudflare Access JWT validation middleware
   lib/power-automate.ts    # stateless Power Automate client
   features/outlook/
-    server.ts              # createOutlookMcpServer factory (3 mail tools)
+    server.ts              # createOutlookMcpServer factory (3 mail + 3 attachment tools)
     schema.ts              # zod schemas (tool I/O + message shapes)
     normalize.ts           # Graph response -> normalized shapes
 ```
 
 ## Hard constraints
 
-- **Read-only.** Only the three tools (`outlook_list_messages`,
-  `outlook_search_messages`, `outlook_get_message`). Never add a generic Graph
+- **Read-only.** Only the six fixed tools (`outlook_list_messages`,
+  `outlook_search_messages`, `outlook_get_message`, `outlook_list_attachments`,
+  `outlook_inspect_attachment`, `outlook_read_attachment`). Never add a generic Graph
   proxy tool (`{ url, method, body }` passthrough).
 - **No persistence.** Never store mail data (no DB/KV/R2/cache). Mail data must
   not outlive a request.
@@ -67,3 +69,15 @@ src/
 - zod v4 for validation. MCP SDK v2 (`@modelcontextprotocol/server`):
   `McpServer` + `registerTool` behind `createMcpHandler` (fresh server per request).
 - Docs and code comments in English.
+
+## Attachment safety
+
+- Keep the original exported flow snapshot unchanged; update the authored attachment
+  extension with `python3 scripts/build_attachment_flow.py`. Never commit raw exports.
+- Keep attachment bytes request-local. Never expose base64 or raw Graph objects to MCP.
+- Enforce transport, raw-file, expanded-byte, XML, page/cell and output limits before
+  trusting parser results. Reject unsupported PDF/OOXML constructs rather than
+  silently removing the guards. Parser exceptions must not reveal document data.
+- Only fixed attachment list/get Graph routes; never follow reference URLs or nextLink.
+- Use synthetic fixtures only. Live flow runs, deployment and merging require
+  separate authorization. See `docs/attachments.md`.

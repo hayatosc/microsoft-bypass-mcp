@@ -12,7 +12,7 @@ read tools that map onto fixed operations, which Power Automate turns into
 fixed Microsoft Graph calls. The server never authenticates to Graph and never
 talks to Graph directly.
 
-The current implementation covers the Outlook mailbox with exactly three tools
+The current implementation covers the Outlook mailbox with six fixed tools
 (§8). Other Microsoft 365 apps (Teams, OneDrive, SharePoint, etc.) are added as
 new features, each following the same pattern: fixed tools -> fixed operations
 -> fixed Graph endpoints.
@@ -71,7 +71,7 @@ request**. No state survives between requests.
 ```ts
 export function createOutlookMcpServer(client: PowerAutomateClient): McpServer {
   const server = new McpServer({ name: 'university-m365', version: '0.1.0' })
-  // ...server.registerTool(...) x3...
+  // ...server.registerTool(...) x6...
   return server
 }
 ```
@@ -131,8 +131,9 @@ has no Access in front). Values are:
 ## 7. Power Automate protocol
 
 The MCP server calls the Power Automate HTTP trigger with `POST` JSON. The
-contract below is the **verified** shape of the real flow (reverse-engineered
-from live responses).
+original three message operations reflect the verified existing flow shape.
+The two attachment operations are an authored extension, verified only with
+offline tests: no live import, flow invocation, or mailbox run has been performed.
 
 A [sanitized snapshot of the exported flow](power-automate/microsoft-bypass-flow/README.md)
 is tracked in this repository. That folder documents source provenance, private
@@ -146,7 +147,7 @@ requests without it.
 
 ```jsonc
 {
-  "operation": "list_messages | search_messages | get_message",
+  "operation": "list_messages | search_messages | get_message | list_attachments | get_attachment",
   "requestId": "<uuid v4, generated per request>",
   "args": {
     // list_messages
@@ -155,6 +156,10 @@ requests without it.
     //   { "query": "<string>", "top": <number> }
     // get_message
     //   { "messageId": "<string>" }
+    // list_attachments
+    //   { "messageId": "<string>", "top": <number>, "skip": <number> }
+    // get_attachment
+    //   { "messageId": "<string>", "attachmentId": "<string>" }
   }
 }
 ```
@@ -210,7 +215,7 @@ errors.
 
 ## 8. MCP tools
 
-Three tools. Every tool defines an `inputSchema` and an `outputSchema`, and
+Six fixed read-only tools. Every tool defines an `inputSchema` and an `outputSchema`, and
 returns both `content` (text, for the LLM) and `structuredContent` (validated
 against `outputSchema`, for programs).
 
@@ -244,6 +249,32 @@ Fetch a full message (including body) by ID.
 
 - Input: `{ messageId: string }`
 - Output: `MessageDetail`
+
+### Attachment tools
+
+`outlook_list_attachments({ messageId, limit?, offset? })` lists metadata only.
+The default limit is 20 (1–50); offset is 0–10,000. A response has `messageId`,
+`attachments`, `hasMore`, and `nextOffset` (null at end or the offset safety cap).
+Worker calls `list_attachments({ messageId, top: limit, skip: offset })`.
+Neither layer follows an arbitrary Graph nextLink.
+
+`outlook_inspect_attachment({ messageId, attachmentId })` fetches one file via
+`get_attachment` and returns `source`, `untrustedContent: true`, and `structure`:
+PDF page count, DOCX heading sections/paragraph counts/text offsets, or XLSX
+sheet names/observed dimensions. `outlook_read_attachment` uses the same target
+plus a format-specific `selection`, returning `source`, `untrustedContent`, and
+`data` with page, text-offset or cell-address provenance.
+
+The flow extension's `get_attachment({ messageId, attachmentId })` returns a
+Graph fileAttachment including internal base64 `contentBytes`; this never reaches
+MCP outputs. The flow checks metadata/type/size before downloading content. Both
+layers enforce fixed GET paths, bounded IDs, and size limits. Only PDF, DOCX and
+XLSX file attachments are eligible; reference/item attachments and external links
+are never fetched. All attachment-derived content is untrusted.
+
+See [the full attachment contract and limits](docs/attachments.md) and
+[the authored flow source](power-automate/attachment-reader-flow/README.md).
+This extension does not change the provenance of the original exported snapshot.
 
 ### Normalized message shapes
 
@@ -304,7 +335,7 @@ Power Automate calls carry an explicit timeout (abort signal); the default is
 
 ```
 send_message, create_draft, delete_message, move_message,
-mark_as_read, mark_as_unread, attachments, pagination,
+mark_as_read, mark_as_unread, message-list pagination,
 mail-folder selection, sent items, calendar, contacts,
 other Microsoft 365 apps (Teams, OneDrive, SharePoint, etc.),
 arbitrary Graph API proxy
@@ -341,6 +372,11 @@ For `list_messages`, `search_messages`, `get_message`, verify:
 - error handling,
 - timeout.
 
+Attachment tests cover synthetic PDF/DOCX/XLSX bytes, malformed inputs, range and
+expansion limits, and provenance. `bun run test:worker` bundles the production app
+in workerd and exercises all six tools with a mocked flow; CI includes this test.
+The authored flow has offline schema, expression, routing, and redaction checks.
+
 ### Integration test
 
 Use the official **MCP Inspector** against the `/mcp` Streamable HTTP endpoint
@@ -349,7 +385,7 @@ to exercise `outlook_list_messages`, `outlook_search_messages`,
 
 ### End-to-end (gated)
 
-Tests that run only when `POWER_AUTOMATE_URL` points at the real flow. Normal
+Live tests may run only when `POWER_AUTOMATE_URL` points at the real flow. Normal
 CI must never touch the real university mailbox.
 
 ## 13. Acceptance criteria
@@ -359,7 +395,7 @@ MVP is complete when all of the following hold.
 ### MCP
 
 - Can connect to `/mcp` over Streamable HTTP.
-- `tools/list` shows the three tools.
+- `tools/list` shows the six fixed tools.
 
 ### list
 

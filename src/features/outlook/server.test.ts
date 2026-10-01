@@ -66,7 +66,7 @@ async function connectClient(client: PowerAutomateClient): Promise<Client> {
 }
 
 describe('createOutlookMcpServer', () => {
-  it('registers exactly the three tools', async () => {
+  it('registers exactly the six tools', async () => {
     const { fetchFn } = mockFlow({ value: [] })
     const mcpClient = await connectClient(
       new PowerAutomateClient({
@@ -79,7 +79,10 @@ describe('createOutlookMcpServer', () => {
     const { tools } = await mcpClient.listTools()
     expect(tools.map((t) => t.name).sort()).toEqual([
       'outlook_get_message',
+      'outlook_inspect_attachment',
+      'outlook_list_attachments',
       'outlook_list_messages',
+      'outlook_read_attachment',
       'outlook_search_messages',
     ])
   })
