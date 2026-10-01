@@ -56,7 +56,24 @@ describe('closed PDF diagnostics', () => {
       'PDF_DECODE_PARAMETERS',
       () => makePdf({ streamDictionary: '/DecodeParms << /Predictor 12 >>' }),
     ],
-    ['PDF_STREAM_FILTER', () => makePdf({ streamDictionary: '/Filter /DCTDecode' })],
+    ['PDF_FILTER_DCT', () => makePdf({ streamDictionary: '/Filter /DCTDecode' })],
+    ['PDF_FILTER_DCT', () => makePdf({ streamDictionary: '/Filter [/DCTDecode]' })],
+    ['PDF_FILTER_JPX', () => makePdf({ streamDictionary: '/Filter /JPXDecode' })],
+    ['PDF_FILTER_JBIG2', () => makePdf({ streamDictionary: '/Filter /JBIG2Decode' })],
+    ['PDF_FILTER_CCITT', () => makePdf({ streamDictionary: '/Filter /CCITTFaxDecode' })],
+    ['PDF_FILTER_LZW', () => makePdf({ streamDictionary: '/Filter /LZWDecode' })],
+    ['PDF_FILTER_ASCII85', () => makePdf({ streamDictionary: '/Filter /ASCII85Decode' })],
+    ['PDF_FILTER_ASCIIHEX', () => makePdf({ streamDictionary: '/Filter /ASCIIHexDecode' })],
+    ['PDF_FILTER_RUNLENGTH', () => makePdf({ streamDictionary: '/Filter /RunLengthDecode' })],
+    ['PDF_FILTER_CRYPT', () => makePdf({ streamDictionary: '/Filter /Crypt' })],
+    ['PDF_FILTER_FLATE_ALIAS', () => makePdf({ streamDictionary: '/Filter /Fl' })],
+    ['PDF_FILTER_INDIRECT', () => makePdf({ streamDictionary: '/Filter 3 0 R' })],
+    [
+      'PDF_FILTER_CHAIN',
+      () => makePdf({ streamDictionary: '/Filter [/ASCII85Decode /DCTDecode]' }),
+    ],
+    ['PDF_FILTER_CHAIN', () => makePdf({ streamDictionary: '/Filter []' })],
+    ['PDF_STREAM_FILTER', () => makePdf({ streamDictionary: '/Filter /SYNTHETIC_PRIVATE_FILTER' })],
     ['PDF_INDIRECT_LENGTH', indirectLength],
     ['PDF_DECOMPRESSION', invalidFlate],
     ['PDF_HEADER', () => encoder.encode('%PDF-2.0\n%%EOF\n')],
@@ -68,6 +85,7 @@ describe('closed PDF diagnostics', () => {
     const error = await failure(() => inspectPdf(bytes()))
     expect(error).toBeInstanceOf(PdfParseError)
     expect(getPdfDiagnosticCode(error)).toBe(code)
+    expect(String(error)).not.toContain('SYNTHETIC_PRIVATE_FILTER')
     expect(getResolvedPDFJS).not.toHaveBeenCalled()
   })
 
