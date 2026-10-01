@@ -7,7 +7,11 @@ new endpoint, or replacement mail implementation is introduced.
 
 This is sanitized Workflow Definition Language source for review, **not an
 importable package, Dataverse solution, or live-tested deployment template**.
-No live flow was edited, run, imported, or deployed to produce this change.
+An authorized designer update of the earlier attachment source was rejected at
+save time: unescaped literal `@` names/values and unsupported Parse JSON
+`pattern` keywords were found. The previously saved flow remained unchanged.
+This compatibility revision has **not** been saved or run in Microsoft’s service;
+offline validation is not a live-deployment acceptance test.
 
 ## Exactly what changes
 
@@ -63,6 +67,27 @@ pre-encoded path. Extra envelope/argument fields are rejected. `requestId` must
 be UUID v4, matching the Worker's `crypto.randomUUID()` calls. These restrictions
 do not alter the old mail branches.
 
+### Power Automate schema compatibility
+
+With this flow's `OpenApiConnection` actions, Power Automate rejects Parse JSON
+schemas containing `pattern` or `patternProperties`. Structural schemas still
+check types, lengths, required fields, numeric bounds, and extra properties.
+Separate, failure-handled boolean Parse JSON guards then enforce UUID v4 format
+and ID character restrictions using documented WDL string functions. No Graph
+action can run before these request guards succeed. Both U+0085 (NEL) and U+FEFF
+(BOM) are rejected to cover the pre-existing Python/JavaScript whitespace
+interpretations. Percent-literal IDs remain data, encoded independently.
+
+List metadata is bounded to 50 entries before its Select projection. Unsafe IDs
+become null and fail a second schema check before any success response. Get
+metadata/content IDs must exactly match the already-validated requested ID.
+All validation failures retain their fixed, sanitized error envelopes.
+
+Literal property names and schema string values beginning with `@` are serialized
+as `@@`, including OData keys and required-property names. WDL evaluates them to
+the original single-`@` names. Runtime accessors such as `['@odata.type']` remain
+unchanged. Do not remove these serialization escapes from the source.
+
 ### Successful responses
 
 Each success is `{ "ok": true, "requestId": "...", "operation": "...", "data": ... }`.
@@ -89,8 +114,11 @@ file simply because its name has a supported extension.
 
 The declared size must be at most **4 MiB (4,194,304 bytes)** before the content
 request. The full response is revalidated for file type, ID, declared size,
-base64 alphabet/padding and a length divisible by four. A simple character-class
-pattern avoids a nested repeated-group pattern on multi-megabyte inputs. The
+base64 alphabet/padding and a length divisible by four. After its type and encoded
+length are bounded, Select checks the alphabet in 8,192-character chunks and a
+failure-handled schema requires every result to be true. String transformations
+therefore stay small; no whole-file `concat`, `base64`, or `string` expression is
+used. Padding position/count, modulus, and decoded length use scalar checks. The
 padded-base64 decoded length is independently
 bounded at 4 MiB, including the two-byte edge case that an encoded-length ceiling
 alone would permit. Metadata size and decoded size are not assumed equal.
@@ -204,7 +232,7 @@ Use this one update path when a live update is separately authorized:
    the private Worker setting before testing; never copy the URL into public text
 6. Under explicit live-test authorization, verify all three existing mail tools
    and the attachment list/inspect/read path with minimal synthetic fixtures.
-   Verify the runtime accepts Parse JSON schemas, regexes, run-after paths and
+   Verify the runtime accepts Parse JSON schemas, WDL guards, run-after paths and
    secure-history settings; connector `$select` preserves `@odata.type` while
    excluding bytes; `$top`/`$skip` pagination works; and type/size/failure gates
    never leak bytes or URLs to MCP. Preserve Cloudflare Access/JWT protection
@@ -221,5 +249,9 @@ through `pac solution pack` as if it were a solution.
 - [Get attachment: types, GET paths, and response shapes](https://learn.microsoft.com/en-us/graph/api/attachment-get?view=graph-rest-1.0)
 - [List message attachments](https://learn.microsoft.com/en-us/graph/api/message-list-attachments?view=graph-rest-1.0)
 - [Workflow action definitions: Parse JSON, Select, and Response](https://learn.microsoft.com/en-us/azure/logic-apps/logic-apps-workflow-actions-triggers)
+- [WDL expressions and literal at-sign escaping](https://learn.microsoft.com/en-us/azure/logic-apps/workflow-definition-language-schema#expressions)
+- [Power Automate example with escaped OData property names](https://learn.microsoft.com/en-us/dynamics365/project-operations/project-management/scheduling-apis-powerautomate-v2)
+- [WDL functions, including chunk and URI encoding](https://learn.microsoft.com/en-us/azure/logic-apps/expression-functions-reference)
+- [Power Automate expression and action limits](https://learn.microsoft.com/en-us/power-automate/limits-and-config)
 - [Secure inputs/outputs and supported actions](https://learn.microsoft.com/en-us/azure/logic-apps/set-up-security-permissions)
 - [Non-solution flow export/import](https://learn.microsoft.com/en-us/power-automate/export-import-flow-non-solution)

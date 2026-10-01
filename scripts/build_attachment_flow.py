@@ -8,6 +8,7 @@ from copy import deepcopy
 import json
 from pathlib import Path
 import sys
+from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parents[1]
 BASELINE = ROOT / "scripts/fixtures/microsoft-bypass-flow.pre-attachments.json"
@@ -16,14 +17,18 @@ MAIL_OPERATIONS = ("list_messages", "get_message", "search_messages")
 ATTACHMENT_OPERATIONS = ("list_attachments", "get_attachment")
 MAX_BYTES = 4 * 1024 * 1024
 MAX_BASE64 = ((MAX_BYTES + 2) // 3) * 4
+BASE64_CHUNK = 8192
 METADATA_FIELDS = ["@odata.type", "id", "name", "contentType", "size", "isInline"]
 GRAPH_ROOT = "https://graph.microsoft.com/v1.0/me/"
 # Percent signs are allowed; uriComponent encodes them again, so caller-supplied
 # encoded separators never become structural path separators.
 ID_SCHEMA = {
     "type": "string", "minLength": 1, "maxLength": 2048,
-    "pattern": r"^(?!\.{1,2}$)[^\s\u0000-\u001f\u007f]+$(?![\s\S])",
 }
+# Union of the existing JavaScript/Python whitespace interpretations, plus C0
+# and DEL. In particular, reject both NEL (U+0085) and BOM (U+FEFF).
+FORBIDDEN_ID_CODEPOINTS = (*range(0x20), 0x20, 0x7F, 0x85, 0xA0, 0x1680,
+    *range(0x2000, 0x200B), 0x2028, 0x2029, 0x202F, 0x205F, 0x3000, 0xFEFF)
 TOP_SCHEMA = {"type": "integer", "minimum": 1, "maximum": 50}
 SKIP_SCHEMA = {"type": "integer", "minimum": 0, "maximum": 10000}
 ARGUMENTS = {
@@ -76,8 +81,22 @@ def success(data, run_after=None):
     }, run_after)
 
 
+def literal_key(value):
+    return "@" + value if value.startswith("@") else value
+
+
+def schema_literals(value):
+    # WDL evaluates JSON property names and string values even inside schemas.
+    # Escape literal leading @ characters while retaining their runtime meaning.
+    if isinstance(value, dict):
+        return {literal_key(key): schema_literals(child) for key, child in value.items()}
+    if isinstance(value, list):
+        return [schema_literals(child) for child in value]
+    return "@" + value if isinstance(value, str) and value.startswith("@") else value
+
+
 def parse(content, schema, run_after=None):
-    return secure({"type": "ParseJson", "runAfter": run_after or {}, "inputs": {"content": content, "schema": deepcopy(schema)}})
+    return secure({"type": "ParseJson", "runAfter": run_after or {}, "inputs": {"content": content, "schema": schema_literals(schema)}})
 
 
 def graph(uri, run_after=None):
@@ -112,7 +131,44 @@ def field(action, name):
 
 
 def projection(action):
-    return {key: field(action, key) for key in METADATA_FIELDS}
+    return {literal_key(key): field(action, key) for key in METADATA_FIELDS}
+
+
+def uuid_v4_guard(value):
+    # Called only after the request schema has enforced a 36-character string.
+    stripped = f"toLower(replace({value}, '-', ''))"
+    remainder = stripped
+    for char in "0123456789abcdef":
+        remainder = f"replace({remainder}, '{char}', '')"
+    checks = [f"equals(length({stripped}), 32)", f"equals({remainder}, '')"]
+    checks += [f"equals(substring({value}, {offset}, 1), '-')" for offset in (8, 13, 18, 23)]
+    checks += [f"equals(substring({value}, 14, 1), '4')", f"contains('89ab', toLower(substring({value}, 19, 1)))"]
+    return "and(" + ", ".join(checks) + ")"
+
+
+def id_guard(value):
+    # Called only after the schema has bounded/typed the ID. Percent signs from
+    # the caller are encoded to %25, so literal strings such as '%20' stay valid.
+    encoded = f"uriComponent({value})"
+    cleaned = encoded
+    # UTF-8 never encodes a non-control character with byte 00..1F. These two
+    # prefixes replace 32 nested calls without rejecting literal '%0'/'%1'.
+    forbidden = ("%0", "%1", *(quote(chr(codepoint), safe="") for codepoint in FORBIDDEN_ID_CODEPOINTS if codepoint >= 0x20))
+    for encoded_character in forbidden:
+        cleaned = f"replace({cleaned}, '{encoded_character}', '')"
+    return f"and(not(equals({value}, '.')), not(equals({value}, '..')), equals(length({encoded}), length({cleaned})))"
+
+
+def base64_alphabet_guard(value):
+    # URI-safe ASCII consists of alphanumerics plus -_.!~*'(). Permit +/= via
+    # explicit encoding, reject the remaining punctuation. Apply only to small
+    # chunks, never construct a multi-megabyte string expression result.
+    escaped = value
+    for char, encoded in (("+", "%2B"), ("/", "%2F"), ("=", "%3D")):
+        escaped = f"replace({escaped}, '{char}', '{encoded}')"
+    checks = [f"equals(uriComponent({value}), {escaped})"]
+    checks += [f"not(contains({value}, '{char.replace(chr(39), chr(39) * 2)}'))" for char in "-_.!~*'()"]
+    return "and(" + ", ".join(checks) + ")"
 
 
 def request_args(operation):
@@ -121,15 +177,23 @@ def request_args(operation):
     envelope = f"Validate_{operation}_request"
     envelope_schema = object_schema({
         "operation": {"type": "string", "enum": [operation]},
-        "requestId": {"type": "string", "minLength": 36, "maxLength": 36, "pattern": r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"},
+        "requestId": {"type": "string", "minLength": 36, "maxLength": 36},
         "args": {"type": "object"},
     }, strict=True)
     actions = {envelope: parse("@triggerBody()", envelope_schema)}
     failure(actions, envelope, status=400, code="INVALID_REQUEST", message="The request envelope is invalid.")
+    request_format = f"Validate_{operation}_request_format"
+    actions[request_format] = parse("@" + uuid_v4_guard(f"body('{envelope}')?['requestId']"), {"type": "boolean", "enum": [True]}, after(envelope))
+    failure(actions, request_format, status=400, code="INVALID_REQUEST", message="The request envelope is invalid.")
     name = f"Validate_{operation}_args"
-    actions[name] = parse(f"@body('{envelope}')?['args']", object_schema(ARGUMENTS[operation], strict=True), after(envelope))
+    actions[name] = parse(f"@body('{envelope}')?['args']", object_schema(ARGUMENTS[operation], strict=True), after(request_format))
     failure(actions, name, status=400, code="INVALID_ARGUMENTS", message="The operation arguments are invalid.")
-    return name, actions
+    ids = f"Validate_{operation}_ids"
+    checks = [id_guard(f"body('{name}')?['{field}']") for field in ARGUMENTS[operation] if field.endswith("Id")]
+    guard = checks[0] if len(checks) == 1 else "and(" + ", ".join(checks) + ")"
+    actions[ids] = parse("@" + guard, {"type": "boolean", "enum": [True]}, after(name))
+    failure(actions, ids, status=400, code="INVALID_ARGUMENTS", message="The operation arguments are invalid.")
+    return name, ids, actions
 
 
 def metadata_schema():
@@ -145,40 +209,44 @@ def metadata_schema():
 
 def list_case():
     operation = "list_attachments"
-    validate, actions = request_args(operation)
+    validate, validated_ids, actions = request_args(operation)
     uri = (
         f"@concat('{GRAPH_ROOT}messages/', uriComponent(body('{validate}')?['messageId']), "
         "'/attachments?$select=id,name,contentType,size,isInline&$top=', "
         f"string(body('{validate}')?['top']), '&$skip=', string(body('{validate}')?['skip']))"
     )
-    actions["Graph_list_attachments"] = graph(uri, after(validate))
+    actions["Graph_list_attachments"] = graph(uri, after(validated_ids))
     failure(actions, "Graph_list_attachments")
     schema = object_schema({"value": {"type": "array", "maxItems": 50, "items": metadata_schema()}})
     schema["properties"]["@odata.nextLink"] = {"type": "string"}
     actions["Validate_attachment_list"] = parse("@body('Graph_list_attachments')", schema, after("Graph_list_attachments"))
     failure(actions, "Validate_attachment_list", code="INVALID_ATTACHMENT_METADATA", message="The upstream attachment metadata is invalid.")
+    selected = {literal_key(key): f"@item()?['{key}']" for key in METADATA_FIELDS}
+    selected["id"] = "@if(" + id_guard("item()?['id']") + ", item()?['id'], null)"
     actions["Select_attachment_metadata"] = secure({
         "type": "Select", "runAfter": after("Validate_attachment_list"),
-        "inputs": {"from": "@body('Validate_attachment_list')?['value']", "select": {key: f"@item()?['{key}']" for key in METADATA_FIELDS}},
+        "inputs": {"from": "@body('Validate_attachment_list')?['value']", "select": selected},
     })
     failure(actions, "Select_attachment_metadata", code="INVALID_ATTACHMENT_METADATA", message="The upstream attachment metadata is invalid.")
+    actions["Validate_projected_attachment_list"] = parse("@body('Select_attachment_metadata')", {"type": "array", "maxItems": 50, "items": metadata_schema()}, after("Select_attachment_metadata"))
+    failure(actions, "Validate_projected_attachment_list", code="INVALID_ATTACHMENT_METADATA", message="The upstream attachment metadata is invalid.")
     actions["Respond_list_attachments"] = success({
         "value": "@body('Select_attachment_metadata')",
         # This is opaque data only. No action ever evaluates/fetches this URL;
         # the Worker discards it after computing hasMore and builds its own cursor.
-        "@odata.nextLink": "@coalesce(body('Validate_attachment_list')?['@odata.nextLink'], '')",
-    }, after("Select_attachment_metadata"))
+        "@@odata.nextLink": "@coalesce(body('Validate_attachment_list')?['@odata.nextLink'], '')",
+    }, after("Validate_projected_attachment_list"))
     return {"case": operation, "actions": actions}
 
 
 def get_case():
     operation = "get_attachment"
-    validate, actions = request_args(operation)
+    validate, validated_ids, actions = request_args(operation)
     path = (
         f"@concat('{GRAPH_ROOT}messages/', uriComponent(body('{validate}')?['messageId']), "
         f"'/attachments/', uriComponent(body('{validate}')?['attachmentId'])"
     )
-    actions["Graph_attachment_metadata"] = graph(path + ", '?$select=id,name,contentType,size,isInline')", after(validate))
+    actions["Graph_attachment_metadata"] = graph(path + ", '?$select=id,name,contentType,size,isInline')", after(validated_ids))
     failure(actions, "Graph_attachment_metadata")
     actions["Validate_attachment_metadata"] = parse("@body('Graph_attachment_metadata')", metadata_schema(), after("Graph_attachment_metadata"))
     failure(actions, "Validate_attachment_metadata", code="INVALID_ATTACHMENT_METADATA", message="The upstream attachment metadata is invalid.")
@@ -190,11 +258,17 @@ def get_case():
     content_schema["properties"]["size"]["maximum"] = MAX_BYTES
     content_schema["properties"]["contentBytes"] = {
         "type": "string", "maxLength": MAX_BASE64,
-        "pattern": r"^[A-Za-z0-9+/]*={0,2}$(?![\s\S])",
     }
     content_schema["required"].append("contentBytes")
     content_actions["Validate_attachment_content"] = parse("@body('Graph_attachment_content')", content_schema, after("Graph_attachment_content"))
     failure(content_actions, "Validate_attachment_content", code="INVALID_ATTACHMENT_CONTENT", message="The upstream attachment content is invalid or exceeds the limit.")
+    content_actions["Select_attachment_content_alphabet"] = secure({
+        "type": "Select", "runAfter": after("Validate_attachment_content"),
+        "inputs": {"from": f"@chunk(body('Validate_attachment_content')?['contentBytes'], {BASE64_CHUNK})", "select": "@" + base64_alphabet_guard("item()")},
+    })
+    failure(content_actions, "Select_attachment_content_alphabet", code="INVALID_ATTACHMENT_CONTENT", message="The upstream attachment content is invalid or exceeds the limit.")
+    content_actions["Validate_attachment_content_alphabet"] = parse("@body('Select_attachment_content_alphabet')", {"type": "array", "maxItems": (MAX_BASE64 + BASE64_CHUNK - 1) // BASE64_CHUNK, "items": {"type": "boolean", "enum": [True]}}, after("Select_attachment_content_alphabet"))
+    failure(content_actions, "Validate_attachment_content_alphabet", code="INVALID_ATTACHMENT_CONTENT", message="The upstream attachment content is invalid or exceeds the limit.")
     # A padded base64 string's encoded-length ceiling alone allows up to two
     # extra decoded bytes. Check the decoded length without materializing bytes.
     b64 = "body('Validate_attachment_content')?['contentBytes']"
@@ -205,9 +279,10 @@ def get_case():
         {"lessOrEquals": ["@" + decoded_size, MAX_BYTES]},
         {"equals": [field("Validate_attachment_content", "id"), field(validate, "attachmentId")]},
         {"equals": [f"@mod(length({b64}), 4)", 0]},
+        {"equals": [f"@or(equals(indexOf({b64}, '='), -1), equals(indexOf({b64}, '='), sub(length({b64}), if(endsWith({b64}, '=='), 2, 1))))", True]},
     ]}, {"Respond_get_attachment": success(accepted)}, {
         "Reject_attachment_content": error(502, "INVALID_ATTACHMENT_CONTENT", "The upstream attachment content is invalid or exceeds the limit.")
-    }, after("Validate_attachment_content"))
+    }, after("Validate_attachment_content_alphabet"))
 
     size_gate = condition({"lessOrEquals": [field("Validate_attachment_metadata", "size"), MAX_BYTES]}, content_actions, {
         "Reject_attachment_size": error(413, "ATTACHMENT_TOO_LARGE", "The attachment exceeds the 4 MiB limit.")
