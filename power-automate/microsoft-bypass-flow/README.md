@@ -6,12 +6,31 @@ are retained. Two attachment cases are added to that switch; no parallel flow,
 new endpoint, or replacement mail implementation is introduced.
 
 This is sanitized Workflow Definition Language source for review, **not an
-importable package, Dataverse solution, or live-tested deployment template**.
+importable package, Dataverse solution, or general-purpose deployment template**.
 An authorized designer update of the earlier attachment source was rejected at
 save time: unescaped literal `@` names/values and unsupported Parse JSON
 `pattern` keywords were found. The previously saved flow remained unchanged.
-This compatibility revision has **not** been saved or run in Microsoft’s service;
-offline validation is not a live-deployment acceptance test.
+
+### Verified runtime coverage (2026-10-01 UTC)
+
+The existing flow accepted this compatibility revision, with zero Flow Checker
+errors or warnings. A post-save export matched the canonical switch and trigger
+schema after normalizing designer-only metadata, omitted empty dependencies, and
+single-term condition wrappers. The existing private authentication, connection,
+trigger, and original mail cases were preserved.
+Run history corroborated successful attachment alphabet/size/identity checks and
+response actions, with secured inputs and outputs hidden.
+
+Bounded calls through the authenticated MCP connector exercised all six tools and
+all five flow operations. DOCX and XLSX inspection and small reads succeeded; an
+unknown DOCX section returned the fixed `INVALID_ARGUMENT` error. Two PDF samples
+were rejected by the unchanged parser's safety/error handling. Their precise
+rejection causes and a successful live PDF extraction were **not** established.
+See [the documented PDF subset](../../docs/attachments.md).
+
+This is limited smoke-test coverage, not proof of every safety branch, file
+format, size boundary, or production latency. Synthetic offline tests cover the
+broader invalid-input and resource-boundary matrix.
 
 ## Exactly what changes
 

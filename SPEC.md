@@ -132,8 +132,9 @@ has no Access in front). Values are:
 
 The MCP server calls the Power Automate HTTP trigger with `POST` JSON. The
 original three message operations reflect the verified existing flow shape.
-The two attachment operations are an authored extension, verified only with
-offline tests: no live import, flow invocation, or mailbox run has been performed.
+The two attachment operations are an authored extension, checked with offline
+tests and bounded authenticated runtime smoke calls. The exact live coverage and
+remaining PDF/runtime limits are recorded with the canonical flow source below.
 
 The [canonical existing-flow definition](power-automate/microsoft-bypass-flow/README.md)
 extends the sanitized export in place, preserving its three mail branches and
