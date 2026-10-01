@@ -21,10 +21,11 @@ bun run lint:types     # oxlint --type-aware
 bun run format         # oxfmt --write src
 bun run format:check   # oxfmt --check src
 bun run test           # vitest
+bun run test:flow      # offline exported-flow contract and redaction tests (Python 3)
 bun run deploy         # wrangler deploy
 ```
 
-Run `typecheck`, `lint`, `lint:types`, `format:check`, and `test` before
+Run `typecheck`, `lint`, `lint:types`, `format:check`, `test`, and `test:flow` before
 committing. Package manager is `bun`.
 
 ## Structure

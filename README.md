@@ -24,6 +24,12 @@ Microsoft Graph
 | `outlook_search_messages` | `{ query: string, limit?: number }` (default 10, 1–50) | `{ messages: MessageSummary[], hasMore: boolean }` |
 | `outlook_get_message` | `{ messageId: string }` | `MessageDetail` |
 
+## Power Automate source
+
+The existing cloud flow is tracked as a [sanitized source snapshot](power-automate/microsoft-bypass-flow/README.md).
+It includes the actual operation routing and Graph queries, plus redaction and
+re-export instructions. It is not an importable package.
+
 ## Requirements
 
 - Microsoftアカウント

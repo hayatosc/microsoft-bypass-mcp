@@ -10,7 +10,8 @@
     "format": "oxfmt --write src",
     "format:check": "oxfmt --check src",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:flow": "python3 -m unittest discover -s scripts -p \"test_*.py\""
   },
   "dependencies": {
     "@modelcontextprotocol/server": "^2.0.0",
