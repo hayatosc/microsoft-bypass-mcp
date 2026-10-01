@@ -23,3 +23,4 @@ jobs:
       - run: bun run lint:types
       - run: bun run format:check
       - run: bun run test
+      - run: bun run test:flow

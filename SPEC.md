@@ -44,7 +44,7 @@ Remote MCP Server (this repo)
 Cloudflare Access (in front of the Worker)
     authentication (OAuth / access policy)
 
-Power Automate (external, not in this repo)
+Power Automate (runtime external; sanitized source in power-automate/)
     operation allowlist
     fixed Microsoft Graph endpoints
     Microsoft 365 authentication
@@ -134,6 +134,10 @@ The MCP server calls the Power Automate HTTP trigger with `POST` JSON. The
 contract below is the **verified** shape of the real flow (reverse-engineered
 from live responses).
 
+A [sanitized snapshot of the exported flow](power-automate/microsoft-bypass-flow/README.md)
+is tracked in this repository. That folder documents source provenance, private
+configuration requirements, and observed differences from this intended contract.
+
 ### Request body
 
 Every request POSTs to the trigger with the `X-MCP-Gateway-Key` header set to
@@ -190,6 +194,10 @@ mismatch is surfaced as a tool error.
 
 Non-2xx (e.g. `400` on schema mismatch, `502` on upstream Graph failure) with a
 body of the shape `{ "error": { "code", "message", ... } }`.
+
+The exported snapshot has two known differences: missing `messageId` returns
+HTTP 200 with `ok: false`, and upstream failures have no explicit error-response
+action. These behaviors are preserved in source and documented with the snapshot.
 
 The MCP server is responsible for **normalizing** `data` into the tool output
 schemas (§8). Non-2xx responses and malformed payloads are surfaced as tool
