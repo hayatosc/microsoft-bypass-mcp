@@ -55,6 +55,13 @@ Fixed Graph endpoint names allow case variation; caller-specified folder IDs and
 query values remain case-sensitive. Invalid caller cursors still fail before any
 upstream request. Conversation pages use the same continuation behavior.
 
+Rejected path diagnostics use only fixed structural categories:
+`PAGINATION_PATH_{ME|USER_SEGMENT|USER_ODATA}_{MESSAGES|FOLDER_SEGMENT|FOLDER_ODATA}`,
+or `PAGINATION_PATH_OTHER`. They expose neither mailbox/folder keys nor URLs.
+These categories describe syntax, not identity or authorization: recognizing a
+parenthesized OData key or `/users/` route does not make that continuation valid.
+Origin checks run first; path rejection still prevents query/cursor acceptance.
+
 ### `outlook_search_messages`
 
 Searches a fixed mailbox scope or folder with connector-supported search text.

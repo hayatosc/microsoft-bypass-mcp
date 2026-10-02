@@ -81,10 +81,13 @@ class CursorValidationError extends SafeToolError {
     this.name = 'CursorValidationError'
   }
 }
+type PaginationPathReason =
+  | 'PAGINATION_PATH_OTHER'
+  | `PAGINATION_PATH_${'ME' | 'USER_SEGMENT' | 'USER_ODATA'}_${'MESSAGES' | 'FOLDER_SEGMENT' | 'FOLDER_ODATA'}`
 type PaginationReason =
   | 'PAGINATION_URL'
   | 'PAGINATION_ORIGIN'
-  | 'PAGINATION_PATH'
+  | PaginationPathReason
   | 'PAGINATION_QUERY_KEYS'
   | 'PAGINATION_TOP'
   | 'PAGINATION_SELECT'
@@ -226,6 +229,26 @@ function matchesGraphPath(
       : a[index] === part
   })
 }
+/** Diagnostic shape only: this never grants path equivalence or retains an ID. */
+function rejectedPathReason(path: string): PaginationPathReason {
+  // Decode quote punctuation only for shape classification, never for acceptance.
+  const match =
+    /^\/v1\.0\/(me|users\/[^/]+|users\('[^/]*'\))\/(messages|mailfolders\/[^/]+\/messages|mailfolders\('[^/]*'\)\/messages)$/i.exec(
+      path.replace(/%27/gi, "'"),
+    )
+  const actor = match?.[1]?.toLowerCase()
+  const resource = match?.[2]?.toLowerCase()
+  if (actor === undefined || resource === undefined) return 'PAGINATION_PATH_OTHER'
+  const actorShape =
+    actor === 'me' ? 'ME' : actor.startsWith('users/') ? 'USER_SEGMENT' : 'USER_ODATA'
+  const resourceShape =
+    resource === 'messages'
+      ? 'MESSAGES'
+      : resource.startsWith('mailfolders/')
+        ? 'FOLDER_SEGMENT'
+        : 'FOLDER_ODATA'
+  return `PAGINATION_PATH_${actorShape}_${resourceShape}`
+}
 function extractNextSkip(nextLink: string | null, expected: ExpectedNextLink): number | null {
   if (nextLink === null) return null
   let url: URL
@@ -244,7 +267,7 @@ function extractNextSkip(nextLink: string | null, expected: ExpectedNextLink): n
   )
     throw new PaginationValidationError('PAGINATION_ORIGIN')
   if (!matchesGraphPath(url.pathname, expected.path, expected.wellKnownFolder))
-    throw new PaginationValidationError('PAGINATION_PATH')
+    throw new PaginationValidationError(rejectedPathReason(url.pathname))
   const params = queryMap(url)
   const allowed = new Set(['$top', '$skip', '$select', '$filter'])
   if (expected.orderBy !== null) allowed.add('$orderby')
