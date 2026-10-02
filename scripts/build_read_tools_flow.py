@@ -28,11 +28,11 @@ ONEDRIVE_CONNECTION = "shared_onedriveforbusiness"
 # maxFileCount, but the live designer must verify the exact machine value used
 # by that tenant before import. Keeping the placeholder visible prevents an
 # invented value from silently entering a production flow.
-ONEDRIVE_FIND_MODE_PLACEHOLDER = "@parameters('OneDriveSearchMode')"
+ONEDRIVE_FIND_MODE_PLACEHOLDER = "@outputs('OneDriveSearchMode')"
 # Power Automate's OneDrive root can require tenant/designer-specific binding.
 # The ListRootFolder action is used for omitted folderId; this placeholder only
 # documents that no arbitrary provider URL/root ID is accepted from callers.
-ONEDRIVE_ROOT_BINDING_PLACEHOLDER = "@parameters('OneDriveSearchRootId')"
+ONEDRIVE_ROOT_BINDING_PLACEHOLDER = "@outputs('OneDriveSearchRootId')"
 
 MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024
 MAX_BASE64 = ((MAX_ATTACHMENT_BYTES + 2) // 3) * 4
@@ -406,8 +406,12 @@ def onedrive_search_case() -> dict:
     source = "body('OneDrive_find_files')"
     onedrive_project_list(native, source, top, "onedrive_search_files", "OneDrive_find_files")
     native["Respond_onedrive_search_files"] = success({"value": "@body('Validate_onedrive_search_files')", "truncated": f"@greaterOrEquals(length({source}), {top})"}, after("Validate_onedrive_search_files"))
-    configured = "@and(not(empty(parameters('OneDriveSearchRootId'))), not(empty(parameters('OneDriveSearchMode'))))"
-    actions["Check_onedrive_search_binding"] = condition({"equals": [configured, True]}, native, {"Reject_onedrive_search_binding": error(503, "ONEDRIVE_SEARCH_NOT_CONFIGURED", "The OneDrive search binding must be configured before use.")}, after(controls))
+    # Named Compose settings are editable in the non-solution cloud-flow designer.
+    # Fixed empty defaults fail closed; never derive configuration from caller args.
+    actions["OneDriveSearchRootId"] = secure({"type": "Compose", "inputs": "", "runAfter": after(controls)})
+    actions["OneDriveSearchMode"] = secure({"type": "Compose", "inputs": "", "runAfter": after("OneDriveSearchRootId")})
+    configured = "@and(not(empty(outputs('OneDriveSearchRootId'))), not(empty(outputs('OneDriveSearchMode'))))"
+    actions["Check_onedrive_search_binding"] = condition({"equals": [configured, True]}, native, {"Reject_onedrive_search_binding": error(503, "ONEDRIVE_SEARCH_NOT_CONFIGURED", "The OneDrive search binding must be configured before use.")}, after("OneDriveSearchMode"))
     return {"case": "onedrive_search_files", "actions": actions}
 
 
@@ -492,9 +496,6 @@ def augment_read_tools(definition: dict) -> dict:
     schema["properties"]["operation"]["enum"] = list(FLOW_OPERATIONS)
     # Per-operation validators provide tighter bounds, including OneDrive top100.
     schema["properties"]["args"] = {"type": "object"}
-    # Public import-time bindings, never authentication material. Empty is fail-closed.
-    definition["parameters"]["OneDriveSearchRootId"] = {"type": "String", "defaultValue": ""}
-    definition["parameters"]["OneDriveSearchMode"] = {"type": "String", "defaultValue": ""}
     cases = definition["actions"]["スイッチ"]["cases"]
     for build in (outlook_list_case, outlook_get_case, outlook_search_case,
                   folders_case, conversation_case, onedrive_search_case,

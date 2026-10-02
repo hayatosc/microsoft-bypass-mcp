@@ -13,14 +13,6 @@
     "McpGatewayKey": {
       "defaultValue": "",
       "type": "SecureString"
-    },
-    "OneDriveSearchRootId": {
-      "type": "String",
-      "defaultValue": ""
-    },
-    "OneDriveSearchMode": {
-      "type": "String",
-      "defaultValue": ""
     }
   },
   "triggers": {
@@ -3666,11 +3658,43 @@
                 }
               }
             },
+            "OneDriveSearchRootId": {
+              "type": "Compose",
+              "inputs": "",
+              "runAfter": {
+                "Validate_onedrive_search_files_controls": [
+                  "Succeeded"
+                ]
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "OneDriveSearchMode": {
+              "type": "Compose",
+              "inputs": "",
+              "runAfter": {
+                "OneDriveSearchRootId": [
+                  "Succeeded"
+                ]
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
             "Check_onedrive_search_binding": {
               "type": "If",
               "expression": {
                 "equals": [
-                  "@and(not(empty(parameters('OneDriveSearchRootId'))), not(empty(parameters('OneDriveSearchMode'))))",
+                  "@and(not(empty(outputs('OneDriveSearchRootId'))), not(empty(outputs('OneDriveSearchMode'))))",
                   true
                 ]
               },
@@ -3681,8 +3705,8 @@
                   "inputs": {
                     "parameters": {
                       "query": "@trim(body('Validate_onedrive_search_files_args')?['query'])",
-                      "id": "@parameters('OneDriveSearchRootId')",
-                      "findMode": "@parameters('OneDriveSearchMode')",
+                      "id": "@outputs('OneDriveSearchRootId')",
+                      "findMode": "@outputs('OneDriveSearchMode')",
                       "maxFileCount": "@body('Validate_onedrive_search_files_args')?['top']"
                     },
                     "host": {
@@ -3986,7 +4010,7 @@
                 }
               },
               "runAfter": {
-                "Validate_onedrive_search_files_controls": [
+                "OneDriveSearchMode": [
                   "Succeeded"
                 ]
               }

@@ -208,7 +208,7 @@ manual tenant/designer verification during authorized import:
 - `OneDriveSearchMode` for the verified native `findMode` machine value
 - `OneDriveSearchRootId` for the connection owner's native root folder ID
 
-Both are public String parameters with empty defaults. Search fails closed with
+Both are named Compose configuration actions with fixed empty-string inputs. Search fails closed with
 HTTP 503 before any connector action until both are set during authorized setup.
 The connector alias `shared_onedriveforbusiness` must also be bound to the owner's
 connection; this source contains no connection ID or authentication secret.

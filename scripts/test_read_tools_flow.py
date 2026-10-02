@@ -63,10 +63,16 @@ def binary(content="YWJj", content_type="application/pdf"):
     return {"$content-type": content_type, "$content": content}
 
 
+def configure_search(flow, root, mode):
+    actions = flow.definition["actions"]["スイッチ"]["cases"]["onedrive_search_files"]["actions"]
+    actions["OneDriveSearchRootId"]["inputs"] = root
+    actions["OneDriveSearchMode"]["inputs"] = mode
+
+
 def configured_flow(operation, args=None, responses=()):
     flow = Flow(operation, deepcopy(VALID_ARGS[operation] if args is None else args), responses)
     # Explicitly synthetic local bindings; no guessed live findMode or root ID.
-    flow.parameters.update(OneDriveSearchRootId="synthetic-root", OneDriveSearchMode="synthetic-mode")
+    configure_search(flow, "synthetic-root", "synthetic-mode")
     return flow
 
 
@@ -209,9 +215,12 @@ class ExpandedStaticContracts(unittest.TestCase):
             self.assertNotIn(action["type"], {"Http", "ApiConnectionWebhook", "AppendToArrayVariable", "SetVariable", "InitializeVariable"})
         for key in ("$authentication", "$connections", "McpGatewayKey"):
             self.assertEqual(SOURCE["parameters"][key], BASELINE_SOURCE["parameters"][key])
-        self.assertEqual(set(SOURCE["parameters"]) - set(BASELINE_SOURCE["parameters"]), {"OneDriveSearchRootId", "OneDriveSearchMode"})
+        self.assertEqual(SOURCE["parameters"], BASELINE_SOURCE["parameters"])
         for key in ("OneDriveSearchRootId", "OneDriveSearchMode"):
-            self.assertEqual(SOURCE["parameters"][key], {"type": "String", "defaultValue": ""})
+            action = CASES["onedrive_search_files"]["actions"][key]
+            self.assertEqual(action["type"], "Compose")
+            self.assertEqual(action["inputs"], "")
+            self.assertEqual(action["runtimeConfiguration"], {"secureData": {"properties": ["inputs"]}})
 
     def test_bounded_native_content_and_separate_preflight_gates(self):
         actions = all_named_actions()
@@ -398,12 +407,18 @@ class ExpandedExecutionContracts(unittest.TestCase):
     def test_search_binding_is_explicit_and_unset_values_fail_closed(self):
         for root, mode in (("", ""), ("synthetic-root", ""), ("", "synthetic-mode")):
             flow = Flow("onedrive_search_files", {"query": "synthetic", "top": 1})
-            flow.parameters.update(OneDriveSearchRootId=root, OneDriveSearchMode=mode)
+            configure_search(flow, root, mode)
             self.assert_error(flow, 503, code="ONEDRIVE_SEARCH_NOT_CONFIGURED")
         flow = configured_flow("onedrive_search_files", {"query": "  file phrase  ", "top": 7}, [[]])
         self.assertEqual(flow.run()["statusCode"], 200)
         self.assertEqual(flow.call_operations, ["FindFiles"])
         self.assertEqual(flow.calls, [{"query": "file phrase", "id": "synthetic-root", "findMode": "synthetic-mode", "maxFileCount": 7}])
+
+    def test_search_configuration_cannot_be_supplied_by_caller(self):
+        for key in ("OneDriveSearchRootId", "OneDriveSearchMode", "rootId", "findMode"):
+            flow = Flow("onedrive_search_files", {"query": "synthetic", "top": 1, key: "synthetic-value"})
+            self.assert_error(flow, 400, code="INVALID_ARGUMENTS")
+            self.assertEqual(flow.calls, [])
 
     def test_empty_native_arrays_and_folder_pages_are_valid(self):
         for operation, args, raw, native_operation in (

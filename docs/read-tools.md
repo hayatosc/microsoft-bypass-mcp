@@ -96,8 +96,8 @@ Uses native `FindFiles` with `query`, root binding, `findMode`, and
 exactly the requested/maximum count, the result is conservatively marked
 potentially truncated; the server must not claim complete enumeration.
 
-The public `OneDriveSearchMode` and `OneDriveSearchRootId` String parameters
-default to empty. Search fails closed before connector access until both have
+The `OneDriveSearchMode` and `OneDriveSearchRootId` Compose configuration actions
+have fixed empty-string inputs by default. Search fails closed before connector access until both have
 verified tenant/designer values. Bind the native connection separately during an
 authorized manual update.
 

@@ -34,7 +34,7 @@ Relative to that fixture, the generated source:
 
 1. Replaces the trigger operation enum with the fixed flow-operation allowlist.
 2. Keeps the trigger's authentication/key guard, switch, default branch and existing
-   parameters, while adding two public, empty-default OneDrive search bindings.
+   parameters, while adding two fixed, empty-default OneDrive search Compose settings.
 3. Rebuilds the switch cases as sanitized fixed read operations.
 4. Adds controlled Outlook mailbox/folder/filter/pagination/conversation support.
 5. Keeps attachment metadata/content branches with request-local byte transport and
@@ -74,8 +74,8 @@ OneDrive branches use only the native OneDrive for Business connector:
 
 The generated source intentionally contains these visible placeholders:
 
-- `OneDriveSearchMode` (public String parameter, empty by default)
-- `OneDriveSearchRootId` (public String parameter, empty by default)
+- `OneDriveSearchMode` (Compose configuration action, empty input by default)
+- `OneDriveSearchRootId` (Compose configuration action, empty input by default)
 
 They must be resolved or confirmed in the Power Automate designer during a
 separately authorized manual update. The OneDrive for Business connector
@@ -86,7 +86,9 @@ provider URLs as a substitute.
 
 Search returns a sanitized HTTP 503 before connector access while either binding
 is empty. Bind the `shared_onedriveforbusiness` connector alias separately to the
-owner's connection. Neither parameter is a secret or an OAuth credential.
+owner's connection. Neither setting is a secret or an OAuth credential. These named Compose actions
+work in the ordinary non-solution cloud-flow designer without adding workflow
+parameters. Their inputs must be fixed verified values, never caller expressions.
 
 OneDrive content reads fetch fresh metadata before content, reject folders,
 reject empty files, reject files over 4 MiB, and require a supported extension
