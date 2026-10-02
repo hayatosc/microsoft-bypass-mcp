@@ -225,11 +225,11 @@ class ExpandedStaticContracts(unittest.TestCase):
     def test_bounded_native_content_and_separate_preflight_gates(self):
         actions = all_named_actions()
         self.assertEqual(actions["Validate_onedrive_binary"]["inputs"]["content"], {
-            "$content-type": "@body('OneDrive_get_content')?['$content-type']",
-            "$content": "@body('OneDrive_get_content')?['$content']",
+            "contentType": "@body('OneDrive_get_content')?['$content-type']",
+            "contentBytes": "@body('OneDrive_get_content')?['$content']",
         })
-        self.assertEqual(actions["Validate_onedrive_binary"]["inputs"]["schema"]["properties"]["$content"]["maxLength"], MAX_BASE64)
-        self.assertEqual(actions["Select_onedrive_content_alphabet"]["inputs"]["from"], "@chunk(body('Validate_onedrive_binary')?['$content'], 8192)")
+        self.assertEqual(actions["Validate_onedrive_binary"]["inputs"]["schema"]["properties"]["contentBytes"]["maxLength"], MAX_BASE64)
+        self.assertEqual(actions["Select_onedrive_content_alphabet"]["inputs"]["from"], "@chunk(body('Validate_onedrive_binary')?['contentBytes'], 8192)")
         self.assertNotIn("body(", actions["Select_onedrive_content_alphabet"]["inputs"]["select"])
         self.assertEqual(actions["OneDrive_get_content"]["runAfter"], {})
         identity = actions["Check_onedrive_content_identity"]
@@ -481,6 +481,19 @@ class ExpandedExecutionContracts(unittest.TestCase):
         self.assertEqual(response["body"]["data"], {"metadata": native_metadata(Id="file/a?b#c"), "contentBytes": "YWJj"})
         self.assertNotIn(CANARY, json.dumps(response))
 
+    def test_binary_projection_uses_non_reserved_keys_and_preserves_native_base64(self):
+        actions = all_named_actions()
+        projected = actions["Validate_onedrive_binary"]["inputs"]["content"]
+        self.assertEqual(set(projected), {"contentType", "contentBytes"})
+        self.assertNotIn("$content", projected)
+        self.assertNotIn("$content-type", projected)
+        for size in (19860, 211842):
+            text = base64.b64encode(bytes(range(256)) * (size // 256) + bytes(range(size % 256))).decode()
+            flow = configured_flow("onedrive_get_content", responses=[native_metadata(Size=size), binary(text)])
+            response = flow.run()
+            self.assertEqual(response["statusCode"], 200)
+            self.assertEqual(response["body"]["data"]["contentBytes"], text)
+
     def test_binary_envelope_type_and_exact_native_size_are_rechecked(self):
         invalid = [None, {}, {"$content": "YWJj"}, binary(content_type="text/plain"), binary("YQ=="), binary("YWJjZA=="), {"$content-type": "application/pdf", "$content": []}]
         for raw in invalid:
@@ -493,8 +506,8 @@ class ExpandedExecutionContracts(unittest.TestCase):
             self.assertEqual(flow.run()["statusCode"], 200)
 
     def test_binary_projection_discards_extra_native_fields_without_fetching_them(self):
-        # The binary connector result is projected into a JSON object before
-        # Parse JSON, avoiding binary media-type coercion. Extra native fields
+        # The native binary envelope is projected to ordinary JSON property
+        # names before Parse JSON, avoiding the reserved wrapper. Extra fields
         # must be discarded rather than copied into the Worker transport.
         flow = configured_flow("onedrive_get_content", responses=[native_metadata(), dict(binary(), downloadUrl="https://outside.invalid/" + CANARY, rawError=CANARY)])
         response = flow.run()
