@@ -95,6 +95,16 @@ transfer, permission, and ambiguous-outcome contract. The existing Outlook
 connection must support `Mail.ReadWrite`; do not add consent or credentials
 without authorization. All draft POST actions disable retries. An ambiguous
 failure may leave a draft or attachment saved, so inspect before retrying.
+Attachment POST results must include bounded `contentBytes` exactly matching the
+validated canonical request, a valid attachment ID, and the exact requested name.
+Graph `size` is bounded nonnegative Int32 metadata, not raw-file length; success
+projects verified raw-file bytes as `size` (1 byte through 2 MiB) for the Worker's existing
+input/output checks. Missing or mismatching returned bytes fail closed as
+`DRAFT_WRITE_AMBIGUOUS`, with no retry, fallback read, or extra endpoint. The
+read-only attachment branches and their independent 4 MiB metadata/raw limits
+are unchanged. Offline synthetic coverage includes raw 889 / metadata 1223 and
+exactly 2 MiB raw with larger metadata; connector response behavior remains an
+authorized rollout check, not a claim of live verification.
 The public source remains sanitized and must not contain live bindings or keys.
 
 ## OneDrive contract notes
@@ -188,7 +198,11 @@ The Worker no-persistence rule remains separate.
 definition, then applies the actions-only clipboard compatibility pass. No second
 deployable flow is generated. Regression tests pin the original attachment hashes
 as provenance, the precise compatible attachment content/hashes, the immutable
-fixture, and deterministic canonical bytes matching the validated candidate.
+fixture, and deterministic current canonical bytes. Historical pre-pass and
+validated-candidate hashes remain pinned by restoring only the three localized
+draft attachment-result values in a test-only copy; the size fix itself has not
+been roundtrip-tested in Microsoft's designer. The clipboard pass's 37 paths
+and 1,149 replacements remain unchanged.
 
 ```sh
 python3 scripts/build_attachment_flow.py

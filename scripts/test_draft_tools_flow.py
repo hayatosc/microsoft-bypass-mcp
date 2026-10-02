@@ -8,12 +8,14 @@ this is not a live Power Automate/Office365 run or an importer verification.
 import base64
 from contextlib import nullcontext
 from copy import deepcopy
+import io
 import itertools
 import json
 import re
 import unittest
 from unittest.mock import patch
 from urllib.parse import quote
+import zipfile
 
 from build_draft_tools_flow import DRAFT_OPERATIONS, ascii_token_guard
 from test_attachment_flow import (
@@ -55,7 +57,7 @@ def upstream(operation, args):
     if operation == "add_draft_attachment":
         return [
             {"id": args["draftId"], "isDraft": True},
-            {"id": "attachment-id", "name": args["name"], "size": len(base64.b64decode(args["contentBytes"]))},
+            {"id": "attachment-id", "name": args["name"], "size": len(base64.b64decode(args["contentBytes"])), "contentBytes": args["contentBytes"]},
         ]
     return [{"id": "draft-id", "isDraft": True}]
 
@@ -63,6 +65,22 @@ def upstream(operation, args):
 def draft_flow(operation, args=None, responses=None, **kwargs):
     args = deepcopy(VALID_ARGS[operation] if args is None else args)
     return Flow(operation, args, upstream(operation, args) if responses is None else responses, **kwargs)
+
+
+def synthetic_docx_889():
+    """Public synthetic OOXML; a ZIP comment pads the valid file to 889 bytes."""
+    parts = {
+        "[Content_Types].xml": '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>',
+        "_rels/.rels": '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>',
+        "word/document.xml": '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Synthetic size regression</w:t></w:r></w:p></w:body></w:document>',
+    }
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, content in parts.items():
+            archive.writestr(name, content)
+    with zipfile.ZipFile(output, "a") as archive:
+        archive.comment = b" " * (889 - len(output.getvalue()))
+    return output.getvalue()
 
 
 def rfc3986_uri_encoder():
@@ -187,6 +205,31 @@ class DraftStaticContracts(unittest.TestCase):
             actions = named_actions(operation)
             controls = "identity" if operation == "add_draft_attachment" else "id"
             self.assertEqual(actions[f"Respond_{operation}"]["runAfter"], {f"Validate_{operation}_result_{controls}": ["Succeeded"]})
+
+    def test_attachment_result_verifies_bytes_and_projects_raw_size_not_graph_size(self):
+        actions = named_actions("add_draft_attachment")
+        self.assertEqual(actions["Validate_add_draft_attachment_result"]["inputs"]["schema"], {
+            "type": "object", "properties": {
+                "id": {"type": "string", "minLength": 1, "maxLength": 2048},
+                "name": {"type": "string", "minLength": 1, "maxLength": 255},
+                "size": {"type": "integer", "minimum": 0, "maximum": 2147483647},
+                "contentBytes": {"type": "string", "minLength": 4, "maxLength": 2796204},
+            }, "required": ["id", "name", "size", "contentBytes"],
+        })
+        identity = actions["Validate_add_draft_attachment_result_identity"]
+        self.assertEqual(identity["runAfter"], {"Validate_add_draft_attachment_result": ["Succeeded"]})
+        guard = identity["inputs"]["content"]
+        self.assertIn("equals(body('Validate_add_draft_attachment_result')?['name'], body('Validate_add_draft_attachment_args')?['name'])", guard)
+        self.assertIn("equals(length(body('Validate_add_draft_attachment_result')?['contentBytes']), length(body('Validate_add_draft_attachment_args')?['contentBytes']))", guard)
+        self.assertIn("contains(body('Validate_add_draft_attachment_result')?['contentBytes'], body('Validate_add_draft_attachment_args')?['contentBytes'])", guard)
+        self.assertNotIn("equals(body('Validate_add_draft_attachment_result')?['contentBytes']", guard)
+        self.assertNotIn("?['size']", guard)
+        self.assertEqual(actions["Respond_add_draft_attachment"]["inputs"]["body"]["data"], {
+            "draftId": "@body('Validate_add_draft_attachment_args')?['draftId']",
+            "attachmentId": "@body('Validate_add_draft_attachment_result')?['id']",
+            "name": "@body('Validate_add_draft_attachment_result')?['name']",
+            "size": "@sub(mul(div(length(body('Validate_add_draft_attachment_args')?['contentBytes']), 4), 3), if(endsWith(body('Validate_add_draft_attachment_args')?['contentBytes'], '=='), 2, if(endsWith(body('Validate_add_draft_attachment_args')?['contentBytes'], '='), 1, 0)))",
+        })
 
     def test_canonical_padding_uses_case_sensitive_legal_sextets(self):
         actions = named_actions("add_draft_attachment")
@@ -565,6 +608,111 @@ class DraftExecutionContracts(unittest.TestCase):
         # byte cap mod 3 == 1; here the cap mod 3 == 2 permits one extra byte.
         self.assertEqual(MAX_BYTES % 3, 2)
 
+    def test_synthetic_docx_raw_889_graph_1223_succeeds_with_one_upload(self):
+        raw = synthetic_docx_889()
+        self.assertEqual(len(raw), 889)
+        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+            self.assertIsNone(archive.testzip())
+            self.assertIn(b"Synthetic size regression", archive.read("word/document.xml"))
+        text = base64.b64encode(raw).decode()
+        args = dict(VALID_ARGS["add_draft_attachment"], name="synthetic.docx", contentBytes=text)
+        responses = upstream("add_draft_attachment", args)
+        responses[1].update(size=1223, body=CANARY, webLink="https://outside.invalid/" + CANARY)
+        flow = draft_flow("add_draft_attachment", args, responses)
+        response = flow.run()
+        self.assertEqual(response["statusCode"], 200)
+        self.assertEqual(response["body"]["data"], {"draftId": "draft-id", "attachmentId": "attachment-id", "name": "synthetic.docx", "size": 889})
+        self.assertEqual([call["Method"] for call in flow.calls], ["GET", "POST"])
+        self.assertEqual(json.loads(flow.calls[1]["Body"])["contentBytes"], text)
+        self.assertEqual(flow.queue, [])
+        for forbidden in (text, "contentBytes", CANARY, "webLink", "outside.invalid"):
+            self.assertNotIn(forbidden, json.dumps(response))
+
+    def test_exact_two_mib_raw_with_larger_graph_metadata_succeeds(self):
+        text = base64.b64encode(b"\xff" * 2097152).decode()
+        args = dict(VALID_ARGS["add_draft_attachment"], contentBytes=text)
+        responses = upstream("add_draft_attachment", args)
+        responses[1]["size"] = 2097153
+        flow = draft_flow("add_draft_attachment", args, responses)
+        response = flow.run()
+        self.assertEqual(response["statusCode"], 200)
+        self.assertEqual(response["body"]["data"]["size"], 2097152)
+        self.assertEqual([call["Method"] for call in flow.calls], ["GET", "POST"])
+        self.assertNotIn(text, json.dumps(response))
+        # The encoded ceiling can also fit one extra raw byte. Returned content
+        # within that ceiling still has to match the validated request exactly.
+        responses[1]["contentBytes"] = base64.b64encode(b"\xff" * 2097153).decode()
+        self.assertEqual(len(responses[1]["contentBytes"]), len(text))
+        self.assert_error(draft_flow("add_draft_attachment", args, responses), status=502, calls=2, ambiguous=True)
+
+    def test_content_identity_survives_case_insensitive_string_equals(self):
+        original_call = Expressions.call
+
+        def case_insensitive_equals(evaluator, name, args):
+            if name == "equals" and all(isinstance(value, str) for value in args):
+                return args[0].casefold() == args[1].casefold()
+            return original_call(evaluator, name, args)
+
+        requested = VALID_ARGS["add_draft_attachment"]["contentBytes"]
+        substituted = requested.swapcase()
+        self.assertNotEqual(requested, substituted)
+        self.assertEqual(len(requested), len(substituted))
+        self.assertNotEqual(base64.b64decode(requested), base64.b64decode(substituted))
+        with patch.object(Expressions, "call", new=case_insensitive_equals):
+            evaluator = Expressions(None)
+            self.assertTrue(evaluator.call("equals", [requested, substituted]))
+            self.assertFalse(evaluator.call("contains", [substituted, requested]))
+            self.assertTrue(evaluator.call("equals", [4, 4]))
+            self.assertFalse(evaluator.call("equals", [4, 8]))
+            exact = draft_flow("add_draft_attachment")
+            self.assertEqual(exact.run()["body"]["data"]["size"], 3)
+            self.assertEqual([call["Method"] for call in exact.calls], ["GET", "POST"])
+            responses = upstream("add_draft_attachment", VALID_ARGS["add_draft_attachment"])
+            responses[1]["contentBytes"] = substituted
+            flow = draft_flow("add_draft_attachment", responses=responses)
+            self.assert_error(flow, status=502, calls=2, ambiguous=True)
+            self.assertEqual(flow.status["Validate_add_draft_attachment_result_identity"], "Failed")
+            self.assertEqual(flow.status["Respond_add_draft_attachment"], "Skipped")
+        self.assertIs(Expressions.call, original_call)
+        self.assertFalse(Expressions(None).call("equals", [requested, substituted]))
+
+    def test_graph_metadata_size_is_nonnegative_int32_not_raw_size(self):
+        for size in (0, 1, 2, 3, 4, 2097153, 2147483647):
+            with self.subTest(size=size):
+                responses = upstream("add_draft_attachment", VALID_ARGS["add_draft_attachment"])
+                responses[1]["size"] = size
+                flow = draft_flow("add_draft_attachment", responses=responses)
+                self.assertEqual(flow.run()["body"]["data"]["size"], 3)
+                self.assertEqual([call["Method"] for call in flow.calls], ["GET", "POST"])
+        for size in (-1, 3.5, 2147483648, True, "3", None, [], {}):
+            with self.subTest(size=size):
+                responses = upstream("add_draft_attachment", VALID_ARGS["add_draft_attachment"])
+                responses[1]["size"] = size
+                flow = draft_flow("add_draft_attachment", responses=responses)
+                self.assert_error(flow, status=502, calls=2, ambiguous=True)
+                self.assertEqual(flow.status["Validate_add_draft_attachment_result"], "Failed")
+
+    def test_returned_content_missing_malformed_oversized_or_wrong_fails_closed(self):
+        for text in (None, True, 123, [], {}, "", "YWJ", "YWJj\n", "YW_j", "YWJ=", "YwJj", "yWJj", "A" * 2796205):
+            with self.subTest(returned_type=type(text).__name__, returned_length=len(text) if isinstance(text, str) else None):
+                responses = upstream("add_draft_attachment", VALID_ARGS["add_draft_attachment"])
+                responses[1].update(contentBytes=text, body=CANARY)
+                flow = draft_flow("add_draft_attachment", responses=responses)
+                response = self.assert_error(flow, status=502, calls=2, ambiguous=True)
+                self.assertEqual([call["Method"] for call in flow.calls], ["GET", "POST"])
+                self.assertEqual(flow.status["Respond_add_draft_attachment"], "Skipped")
+                self.assertNotIn("contentBytes", json.dumps(response))
+        for key in ("id", "name", "size", "contentBytes"):
+            responses = upstream("add_draft_attachment", VALID_ARGS["add_draft_attachment"])
+            del responses[1][key]
+            self.assert_error(draft_flow("add_draft_attachment", responses=responses), status=502, calls=2, ambiguous=True)
+        # Same decoded byte, but noncanonical unused padding bits, is not identity.
+        args = dict(VALID_ARGS["add_draft_attachment"], contentBytes="YQ==")
+        responses = upstream("add_draft_attachment", args)
+        responses[1]["contentBytes"] = "YR=="
+        self.assertEqual(base64.b64decode("YQ=="), base64.b64decode("YR=="))
+        self.assert_error(draft_flow("add_draft_attachment", args, responses), status=502, calls=2, ambiguous=True)
+
     def test_preflight_wrong_id_non_draft_malformed_or_failure_prevents_post(self):
         for raw in ({"id": "wrong-id", "isDraft": True}, {"id": "draft-id", "isDraft": False}):
             flow = draft_flow("add_draft_attachment", responses=[raw])
@@ -592,19 +740,22 @@ class DraftExecutionContracts(unittest.TestCase):
             for raw in malformed + [ValueError(CANARY), TimeoutError(CANARY)]:
                 self.assert_error(draft_flow(operation, responses=[raw]), status=502, calls=1, ambiguous=True)
 
-    def test_attachment_result_id_name_size_and_post_failures_are_ambiguous(self):
-        malformed = [None, [], {}, "wrong", {"id": "attachment-id", "name": "sample.pdf"}]
-        malformed += [{"id": value, "name": "sample.pdf", "size": 3} for value in ("", ".", "..", "bad id", "x\u0085y", "x\ud800y", "x" * 2049, None, True, 123, [], {})]
-        malformed += [{"id": "attachment-id", "name": name, "size": size} for name, size in (("wrong.pdf", 3), ("sample.pdf", 2), ("sample.pdf", 4), ("sample.pdf", 0), ("sample.pdf", MAX_BYTES + 1), ("sample.pdf", True), ("sample.pdf", "3"), ("sample.pdf", 3.5), (None, 3))]
+    def test_attachment_result_id_name_and_post_failures_are_ambiguous(self):
+        valid = {"id": "attachment-id", "name": "sample.pdf", "size": 3, "contentBytes": "YWJj"}
+        malformed = [None, [], {}, "wrong"]
+        malformed += [dict(valid, id=value) for value in ("", ".", "..", "bad id", "x\u0085y", "x\ud800y", "x" * 2049, None, True, 123, [], {})]
+        malformed += [dict(valid, name=value) for value in ("wrong.pdf", "", "x" * 256, None, True, 123, [], {})]
         for raw in malformed + [ValueError(CANARY), TimeoutError(CANARY)]:
-            self.assert_error(draft_flow("add_draft_attachment", responses=[{"id": "draft-id", "isDraft": True}, raw]), status=502, calls=2, ambiguous=True)
+            flow = draft_flow("add_draft_attachment", responses=[{"id": "draft-id", "isDraft": True}, raw])
+            self.assert_error(flow, status=502, calls=2, ambiguous=True)
+            self.assertEqual([call["Method"] for call in flow.calls], ["GET", "POST"])
 
     def test_attachment_result_name_case_only_mismatch_is_ambiguous(self):
         requested = VALID_ARGS["add_draft_attachment"]["name"]
         returned = requested.upper()
         self.assertNotEqual(requested, returned)
         self.assertEqual(requested.lower(), returned.lower())
-        responses = [{"id": "draft-id", "isDraft": True}, {"id": "attachment-id", "name": returned, "size": 3}]
+        responses = [{"id": "draft-id", "isDraft": True}, {"id": "attachment-id", "name": returned, "size": 3, "contentBytes": "YWJj"}]
         flow = draft_flow("add_draft_attachment", responses=responses)
         self.assert_error(flow, status=502, calls=2, ambiguous=True)
         self.assertEqual([call["Method"] for call in flow.calls], ["GET", "POST"])

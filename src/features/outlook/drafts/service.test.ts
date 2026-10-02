@@ -119,8 +119,54 @@ describe('draft service', () => {
     ).rejects.toThrow('draftId does not match')
   })
 
-  it('rejects attachment responses with mismatched metadata bounds', async () => {
-    const { client } = mockClient({
+  it.each([889, 2097152])('accepts verified raw-file size %i from the flow', async (size) => {
+    const { records, client } = mockClient({
+      draftId: 'draft-1',
+      attachmentId: 'attachment-1',
+      name: 'note.txt',
+      size,
+    })
+    await expect(
+      addDraftAttachment(client, {
+        draftId: 'draft-1',
+        name: 'note.txt',
+        contentType: 'text/plain',
+        contentBytes: btoa('x'.repeat(size)),
+      }),
+    ).resolves.toEqual({ draftId: 'draft-1', attachmentId: 'attachment-1', name: 'note.txt', size })
+    expect(records).toHaveLength(1)
+  })
+
+  it.each([
+    { attachmentId: 'bad id' },
+    { attachmentId: '.' },
+    { name: 'NOTE.txt' },
+    { size: 0 },
+    { size: -1 },
+    { size: 3.5 },
+    { size: 2097153 },
+    { size: 2147483648 },
+  ])('rejects forged or out-of-bound raw-file output without retrying %j', async (change) => {
+    const { records, client } = mockClient({
+      draftId: 'draft-1',
+      attachmentId: 'attachment-1',
+      name: 'note.txt',
+      size: 5,
+      ...change,
+    })
+    await expect(
+      addDraftAttachment(client, {
+        draftId: 'draft-1',
+        name: 'note.txt',
+        contentType: 'text/plain',
+        contentBytes: 'aGVsbG8=',
+      }),
+    ).rejects.toThrow('inspect Drafts before retrying')
+    expect(records).toHaveLength(1)
+  })
+
+  it('rejects attachment responses with mismatched raw-file size', async () => {
+    const { records, client } = mockClient({
       draftId: 'draft-1',
       attachmentId: 'attachment-1',
       name: 'note.txt',
@@ -135,6 +181,7 @@ describe('draft service', () => {
         contentBytes: 'aGVsbG8=',
       }),
     ).rejects.toThrow('size does not match')
+    expect(records).toHaveLength(1)
   })
 })
 

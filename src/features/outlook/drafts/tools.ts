@@ -93,7 +93,7 @@ export function registerDraftTools(server: McpServer, client: PowerAutomateClien
     {
       title: 'Add Outlook draft attachment',
       description:
-        'Add one bounded attachment to an existing Outlook draft using strict canonical base64 bytes and verified draft metadata. ' +
+        'Add one nonempty attachment of at most 2 MiB raw-file bytes to an existing Outlook draft using strict canonical base64 bytes and verified draft metadata. Returns verified raw-file size, not Graph attachment metadata size. ' +
         attachmentDescriptionSuffix,
       inputSchema: addDraftAttachmentInputSchema,
       outputSchema: draftAttachmentOutputSchema,

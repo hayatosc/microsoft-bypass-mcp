@@ -253,16 +253,24 @@ def attachment_case():
     result = f"Validate_{operation}_result"
     add_parse(upload, result, f"@body('{source}')", object_schema({
         "id": ID_SCHEMA, "name": {"type": "string", "minLength": 1, "maxLength": 255},
-        "size": {"type": "integer", "minimum": 1, "maximum": MAX_BYTES},
+        # Graph's attachment size is Int32 metadata, not the raw-file length.
+        "size": {"type": "integer", "minimum": 0, "maximum": 2147483647},
+        "contentBytes": {"type": "string", "minLength": 4, "maxLength": MAX_BASE64},
     }), source, on_failure=ambiguous)
+    # Equal numeric lengths plus documented case-sensitive contains() prove full
+    # payload identity with the canonical, nonempty request (at most 2 MiB raw).
+    # Do not rely on equals() string case behavior or Graph metadata overhead.
+    # https://learn.microsoft.com/en-us/azure/logic-apps/expression-functions-reference#contains
     controls = add_guard(upload, f"Validate_{operation}_result_identity", "and(" + ", ".join([
         id_guard(f"body('{result}')?['id']"),
         f"equals(body('{result}')?['name'], body('{args}')?['name'])",
-        f"equals(body('{result}')?['size'], outputs('{size}'))",
+        f"equals(length(body('{result}')?['contentBytes']), length({b64}))",
+        f"contains(body('{result}')?['contentBytes'], {b64})",
     ]) + ")", result, on_failure=ambiguous)
     upload[f"Respond_{operation}"] = success({
         "draftId": field(args, "draftId"), "attachmentId": field(result, "id"),
-        "name": field(result, "name"), "size": field(result, "size"),
+        # Return the verified raw-file byte count, never Graph size or content.
+        "name": field(result, "name"), "size": "@" + decoded_size(b64),
     }, after(controls))
     actions["Check_draft_preflight"] = condition({"and": [
         {"equals": [field(verified, "id"), field(args, "draftId")]},

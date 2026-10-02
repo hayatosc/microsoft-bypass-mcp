@@ -119,7 +119,12 @@ export const draftAttachmentOutputSchema = z
     draftId: messageIdSchema,
     attachmentId: messageIdSchema,
     name: z.string().min(1).max(MAX_DRAFT_ATTACHMENT_NAME_CHARACTERS),
-    size: z.number().int().min(1).max(MAX_DRAFT_ATTACHMENT_BYTES),
+    size: z
+      .number()
+      .int()
+      .min(1)
+      .max(MAX_DRAFT_ATTACHMENT_BYTES)
+      .describe('Verified raw-file size in bytes, not Microsoft Graph attachment metadata size.'),
   })
   .strict()
 

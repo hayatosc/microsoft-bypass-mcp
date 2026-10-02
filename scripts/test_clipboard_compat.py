@@ -2,8 +2,9 @@
 
 No network, native WDL runtime or designer access. Interpolation tests use an
 explicit test-only bridge to the unchanged existing public WDL subset emulator.
-Canonical hashes pin the original public source and validated string(null)
-candidate without depending on staging paths or creating another flow source.
+Canonical hashes pin the current source and, after restoring only the localized
+attachment-result size fix, the historical source and validated string(null)
+candidate. No staging paths or second flow source are used.
 """
 
 from copy import deepcopy
@@ -20,6 +21,7 @@ from test_attachment_flow import Expressions, Flow, SOURCE, string_length, walk
 
 ORIGINAL_SHA256 = "2835abf5329db9c485919958a7496854a3f1e602c704427020bf9edf711ebd3d"
 CANDIDATE_SHA256 = "0d35f92d41144c5dc6daa1c670ee131e783245e549bf05878985d64d02a68a7a"
+CURRENT_SHA256 = "38102633f27c3ce334c21aa55299664f2955e68e09e075aa48d75e012ae7912c"
 
 
 def resolve_with_interpolation(value):
@@ -88,6 +90,27 @@ def pre_compat_definition():
     # Scoped bypass of ONLY the final lexical pass, not any generator logic.
     with patch.object(builder, "transform_json", side_effect=lambda value: value):
         return builder.build_definition()
+
+
+def before_attachment_size_fix(definition):
+    """Restore only three known result values for the historical hash pins.
+
+    Current result schemas/behavior are independently pinned in draft tests;
+    these historical hashes prove all other canonical source remains unchanged.
+    """
+    historical = deepcopy(definition)
+    upload = historical["actions"]["スイッチ"]["cases"]["add_draft_attachment"]["actions"]["Check_draft_preflight"]["actions"]
+    schema = upload["Validate_add_draft_attachment_result"]["inputs"]["schema"]
+    schema["properties"]["size"] = {"type": "integer", "minimum": 1, "maximum": 2097152}
+    del schema["properties"]["contentBytes"]
+    schema["required"].remove("contentBytes")
+    identity = upload["Validate_add_draft_attachment_result_identity"]["inputs"]
+    identity["content"] = identity["content"].replace(
+        "equals(length(body('Validate_add_draft_attachment_result')?['contentBytes']), length(body('Validate_add_draft_attachment_args')?['contentBytes'])), contains(body('Validate_add_draft_attachment_result')?['contentBytes'], body('Validate_add_draft_attachment_args')?['contentBytes'])",
+        "equals(body('Validate_add_draft_attachment_result')?['size'], outputs('Compose_add_draft_attachment_size'))",
+    )
+    upload["Respond_add_draft_attachment"]["inputs"]["body"]["data"]["size"] = "@body('Validate_add_draft_attachment_result')?['size']"
+    return historical
 
 
 class ClipboardTransformTests(unittest.TestCase):
@@ -346,12 +369,16 @@ class CanonicalGenerationTests(unittest.TestCase):
         self.assertEqual((len(changes), sum(c.replacements for c in changes)), (37, 1149))
         self.assertTrue(all(c.location == "value" for c in changes))
 
-    def test_generation_is_deterministic_and_matches_validated_candidate_bytes(self):
-        first = render(builder.build_definition())
+    def test_generation_is_deterministic_and_preserves_historical_candidate_outside_size_fix(self):
+        current = builder.build_definition()
+        first = render(current)
         self.assertEqual(first, render(builder.build_definition()))
         self.assertEqual(first, builder.DESTINATION.read_bytes())
-        self.assertEqual(hashlib.sha256(first).hexdigest(), CANDIDATE_SHA256)
-        self.assertEqual(hashlib.sha256(render(pre_compat_definition())).hexdigest(), ORIGINAL_SHA256)
+        self.assertEqual(hashlib.sha256(first).hexdigest(), CURRENT_SHA256)
+        historical = render(before_attachment_size_fix(current))
+        self.assertEqual(hashlib.sha256(historical).hexdigest(), CANDIDATE_SHA256)
+        historical_pre_compat = render(before_attachment_size_fix(pre_compat_definition()))
+        self.assertEqual(hashlib.sha256(historical_pre_compat).hexdigest(), ORIGINAL_SHA256)
 
     def test_all_non_actions_remain_exactly_pre_transform_output(self):
         before = pre_compat_definition()

@@ -36,6 +36,8 @@ function normalizeDraftAttachment(
     throw new DraftError('Draft attachment response draftId does not match')
   if (parsed.data.name !== input.name)
     throw new DraftError('Draft attachment response name does not match')
+  // The flow verifies returned contentBytes against the canonical request and
+  // projects raw-file size. Graph attachment metadata size is not used here.
   const expectedSize = draftAttachmentSize(input.contentBytes)
   if (parsed.data.size !== expectedSize)
     throw new DraftError('Draft attachment response size does not match')

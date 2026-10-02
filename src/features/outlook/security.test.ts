@@ -1156,6 +1156,95 @@ describe('Outlook read-tool security boundaries', () => {
     expect(result.structuredContent).toBeUndefined()
   })
 
+  it.each([
+    [
+      'outlook_get_message',
+      { messageId: 'message-1' },
+      'get_message',
+      'BODY_CONTENT_TYPE_INVALID,FROM_NAME_MISSING,RECEIVED_DATE_INVALID,SENT_DATE_NULL',
+    ],
+    [
+      'outlook_list_messages',
+      { limit: 3, mailbox: 'all', filters: { isRead: false } },
+      'list_messages',
+      'FROM_NAME_MISSING,RECEIVED_DATE_INVALID,SENT_DATE_NULL',
+    ],
+    [
+      'outlook_search_messages',
+      { query: 'synthetic', limit: 3 },
+      'search_messages',
+      'FROM_NAME_MISSING,RECEIVED_DATE_INVALID,SENT_DATE_NULL',
+    ],
+  ] as const)(
+    'returns only safe combined shape codes for %s without diagnostic logging',
+    async (name, args, operation, codes) => {
+      const logs = vi.spyOn(console, 'log').mockImplementation(() => {})
+      const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const warnings = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const malformed = {
+        ...message,
+        id: CANARY,
+        subject: CANARY,
+        from: { emailAddress: { address: CANARY, [CANARY]: CANARY } },
+        sentDateTime: null,
+        receivedDateTime: CANARY,
+        body: { contentType: CANARY, content: CANARY },
+        toRecipients: [{ emailAddress: { name: CANARY, address: CANARY } }],
+        [CANARY]: { [CANARY]: CANARY },
+      }
+      const { mcp, records, fetchFn } = await flow(() =>
+        operation === 'get_message' ? malformed : { value: [message, malformed, malformed] },
+      )
+      const result = await call(mcp, name, args)
+      expect(result.isError).toBe(true)
+      expect(result.structuredContent).toBeUndefined()
+      expect(result.content).toEqual([
+        {
+          type: 'text',
+          text: `malformed response: expected ${operation === 'get_message' ? 'a message' : 'a list of messages'} (${codes})`,
+        },
+      ])
+      expect(fetchFn).toHaveBeenCalledOnce()
+      expect(records[0]?.operation).toBe(operation)
+      if (operation === 'list_messages')
+        expect(records[0]?.args).toEqual({
+          top: 3,
+          skip: 0,
+          mailbox: 'all',
+          filters: { isRead: false },
+        })
+      expect(logs).toHaveBeenCalledOnce()
+      expect(errors).not.toHaveBeenCalled()
+      expect(warnings).not.toHaveBeenCalled()
+      const telemetry = z
+        .record(z.string(), z.unknown())
+        .parse(JSON.parse(z.string().parse(logs.mock.calls[0]?.[0])))
+      expect(Object.keys(telemetry).sort()).toEqual([
+        'durationMs',
+        'operation',
+        'requestId',
+        'status',
+        'success',
+        'type',
+      ])
+      // Transport success is unchanged; normalization failure adds no telemetry.
+      expect(telemetry).toMatchObject({ operation, status: 200, success: true })
+      expect(JSON.stringify(logs.mock.calls)).not.toContain(codes)
+      for (const serialized of [JSON.stringify(result), JSON.stringify(logs.mock.calls)]) {
+        for (const forbidden of [
+          CANARY,
+          'example.test',
+          'emailAddress',
+          'receivedDateTime',
+          'sentDateTime',
+          'value',
+          'issues',
+        ])
+          expect(serialized).not.toContain(forbidden)
+      }
+    },
+  )
+
   it('sanitizes upstream failures and logs only the documented diagnostic fields', async () => {
     const logs = vi.spyOn(console, 'log').mockImplementation(() => {})
     const { mcp } = await flow(() => {

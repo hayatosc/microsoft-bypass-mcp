@@ -358,4 +358,12 @@ See [`docs/drafts.md`](docs/drafts.md) for the authoritative draft argument,
 attachment-transfer, approval, and retry contract. All three tools are writes
 and non-idempotent. Only fixed `/me/messages` create/reply/attachment operations
 are allowed, with no sending, deletion, generic HTTP input, or automatic POST
-retry. The Worker remains stateless; only the requested Outlook draft persists.
+retry. Draft attachment success requires bounded returned `contentBytes` exactly
+matching the validated canonical request, plus a valid attachment ID and exact
+requested name. Graph metadata `size` is independently a nonnegative Int32, not
+an assertion of raw-file length. The draft tool's returned `size` is the verified
+raw-file byte count (1 byte through 2 MiB); the Worker retains its input-size equality check.
+Missing or mismatching bytes after upload fail closed as an ambiguous write,
+without retry. Read-only attachment size semantics and independent 4 MiB
+metadata/raw bounds are unchanged. The Worker remains stateless; only the
+requested Outlook draft persists.

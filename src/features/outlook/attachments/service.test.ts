@@ -11,7 +11,7 @@ import {
   normalizeAttachments,
   readAttachment,
 } from './service.js'
-import { syntheticAttachment } from './synthetic-fixtures.js'
+import { syntheticAttachment, syntheticGraphSizeAttachment } from './synthetic-fixtures.js'
 
 const requestSchema = z.object({ operation: z.string(), requestId: z.string(), args: z.unknown() })
 function flow(data: unknown) {
@@ -82,6 +82,32 @@ describe('bounded attachment service', () => {
       sourceEnd: 8,
       nextOffset: 8,
     })
+  })
+  it('inspects and reads raw 889-byte DOCX with Graph size 1223 independently', async () => {
+    const file = syntheticGraphSizeAttachment()
+    expect(atob(file.contentBytes)).toHaveLength(889)
+    expect(file.size).toBe(1223)
+    const { client, fetchFn } = flow(file)
+    const inspection = await inspectAttachment(client, target)
+    expect(inspection.source.size).toBe(1223)
+    expect(inspection.structure.format).toBe('docx')
+    const read = await readAttachment(
+      client,
+      readAttachmentInputSchema.parse({
+        ...target,
+        selection: { format: 'docx', offset: 0, length: 100 },
+      }),
+    )
+    expect(read.source.size).toBe(1223)
+    expect(read.data).toMatchObject({
+      format: 'docx',
+      text: expect.stringContaining('Synthetic document body'),
+    })
+    expect(fetchFn).toHaveBeenCalledTimes(2)
+    for (const result of [inspection, read]) {
+      expect(JSON.stringify(result)).not.toContain('contentBytes')
+      expect(JSON.stringify(result)).not.toContain(file.contentBytes)
+    }
   })
   it('reads exact cells and cached values without formulas', async () => {
     const { client } = flow(syntheticAttachment('xlsx'))

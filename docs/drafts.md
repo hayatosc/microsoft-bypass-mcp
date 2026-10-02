@@ -43,8 +43,9 @@ edits or sending. Avoid modifying/sending the same draft during an upload.
 - Filenames at most 255 characters, without paths or control characters
 - Canonical base64 only; no data URLs, upload URLs, remote fetches, upload
   sessions, cloud-file pointers, or arbitrary paths
-- Responses contain bounded identifiers and metadata only, never attachment
-  bytes/base64 or raw Graph objects
+- Responses contain bounded identifiers, name, and verified **raw-file** `size`
+  in bytes (1 byte through 2 MiB), never attachment bytes/base64 or raw Graph objects.
+  This draft-upload `size` is not Microsoft Graph attachment metadata size
 
 A chat attachment is not automatically readable by this MCP server. The host
 must first materialize the user-approved file through its supported file API,
@@ -57,6 +58,45 @@ also exceed a host’s own tool-call limit even below the server’s limit.
 The Worker and flow keep data request-local; the requested saved draft and its
 attachments persist only in the user’s mailbox. The flow secures data-bearing
 run-history inputs/outputs and does not add storage or caches.
+
+## Attachment verification and size semantics
+
+Microsoft's [fileAttachment resource](https://learn.microsoft.com/en-us/graph/api/resources/fileattachment?view=graph-rest-1.0)
+defines `size` as Int32 attachment size in bytes and `contentBytes` as base64 file
+contents; it does not promise metadata `size` equals decoded file length. The
+[attachment POST documentation](https://learn.microsoft.com/en-us/graph/api/message-post-attachments?view=graph-rest-1.0)
+documents a 201 response with an attachment object and includes `contentBytes`
+in its file-attachment example.
+
+After the strict draft ID/`isDraft` preflight and a single upload, the flow:
+
+1. Validates the returned attachment ID and exact requested name, and bounds
+   Graph metadata `size` to a nonnegative Int32 (`0..2147483647`), not 2 MiB
+2. Requires returned `contentBytes` to be a bounded string with equal numeric
+   string length and case-sensitive `contains(returnedContentBytes, requestedContentBytes)`.
+   Microsoft's [function reference](https://learn.microsoft.com/en-us/azure/logic-apps/expression-functions-reference#contains)
+   documents `contains()` as case-sensitive; this full-payload comparison does
+   not rely on `equals()` string case behavior. The request is canonical and
+   nonempty, so this proves exact raw-file identity and its bound of at most
+   2 MiB without decoding bytes in the flow, estimating metadata overhead, or
+   returning bytes
+3. Projects the validated request's raw-file byte count as response `size`.
+   The Worker independently checks this against its input and retains the
+   existing 2 MiB raw output bound
+
+For example, synthetic raw content of 889 bytes with Graph metadata size 1223
+returns `size: 889`; exactly 2 MiB raw content can succeed even when metadata
+size exceeds 2 MiB. There is no overhead formula or fixed delta. Missing,
+malformed, oversized, noncanonical, or mismatching returned content fails closed
+as `DRAFT_WRITE_AMBIGUOUS`, without another upload or a fallback read. A connector
+that omits the documented bytes will therefore require manual inspection; this
+patch does not claim that every tenant's connector returns them. Such failures
+may occur **after** an attachment has been saved.
+
+Read-only attachment list/inspect/read outputs retain **Graph metadata size**;
+inspect/read metadata size and decoded bytes remain independently bounded to 4 MiB.
+Their size semantics are not changed by draft-upload verification; see
+[`attachments.md`](attachments.md).
 
 ## Failure and retry behavior
 
