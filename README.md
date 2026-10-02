@@ -1,48 +1,71 @@
 # microsoft-bypass-mcp
 
-Microsoftアカウントのテナント管理者がAIサービス(ChatGPT, Claudeなど)との連携を承認していないときに、Power Automate経由でバイパスして情報を取得できるリモートMCPサーバー
+Microsoftアカウントのテナント管理者がAIサービス(ChatGPT, Claudeなど)との連携を承認していないときに、Power Automate経由でバイパスして情報を取得できるリモートMCPサーバー。
 
-## Specification
+The server is read-only and exposes a fixed Microsoft 365 read surface. It is not
+a generic Microsoft Graph proxy.
 
-### Architecture
+## Architecture
 
 ```
 MCP Client
-    ↓  MCP over Streamable HTTP (/mcp)
+    ↓ MCP over Streamable HTTP (/mcp)
 Remote MCP Server — Cloudflare Workers + Hono (Cloudflare Access OAuth)
-    ↓  HTTP POST { operation, requestId, args }
-Power Automate — operation allowlist → fixed Graph endpoints, M365 auth
+    ↓ HTTP POST { operation, requestId, args }
+Power Automate — operation allowlist → fixed read connector actions
     ↓
-Microsoft Graph
+Microsoft 365 connectors
 ```
 
-### Tools
+## Tools
 
-| Tool | Input | Output |
+| Tool | Input summary | Output summary |
 | --- | --- | --- |
-| `outlook_list_messages` | `{ limit?: number }` (default 5, 1–50) | `{ messages: MessageSummary[], hasMore: boolean }` |
-| `outlook_search_messages` | `{ query: string, limit?: number }` (default 10, 1–50) | `{ messages: MessageSummary[], hasMore: boolean }` |
-| `outlook_get_message` | `{ messageId: string }` | `MessageDetail` |
-| `outlook_list_attachments` | `{ messageId, limit?, offset? }` | Metadata + next offset |
-| `outlook_inspect_attachment` | `{ messageId, attachmentId }` | PDF pages, DOCX sections or XLSX sheets |
-| `outlook_read_attachment` | `{ messageId, attachmentId, selection }` | Bounded content with source provenance |
+| `outlook_list_messages` | mailbox/folder, limit, cursor, controlled filters | Message summaries + bounded cursor |
+| `outlook_search_messages` | query, mailbox/folder, limit | First search page |
+| `outlook_get_message` | message ID | Full selected message |
+| `outlook_list_mail_folders` | limit | Folder summaries + incomplete flag |
+| `outlook_get_conversation` | conversation ID, limit, cursor | Exact conversation page including sent mail when accessible |
+| `outlook_list_attachments` | message ID, limit, offset | Attachment metadata + next offset |
+| `outlook_inspect_attachment` | message ID, attachment ID | PDF/DOCX/XLSX structure |
+| `outlook_read_attachment` | message ID, attachment ID, selection | Bounded content with source provenance |
+| `onedrive_search_files` | query, limit | Native OneDrive owned-file metadata |
+| `onedrive_list_folder` | optional folder ID, limit | Native root/folder metadata |
+| `onedrive_get_metadata` | file ID | Projected native metadata |
+| `onedrive_inspect_file` | file ID | PDF/DOCX/XLSX structure |
+| `onedrive_read_file` | file ID, selection | Bounded content with source provenance |
+
+All text and extracted file content is untrusted external content.
 
 ## Power Automate source
 
-The existing [microsoft bypass flow source](power-automate/microsoft-bypass-flow/README.md)
-is extended in place: the same HTTP trigger and operation switch retain the three
-mail branches and add attachment list/get branches. There is one canonical JSON
-at `power-automate/microsoft-bypass-flow/definition.json`, with an in-place update
-procedure for the existing flow. It is source for review, not an importable package.
-The Worker needs that existing flow updated before attachment tools work.
-See [attachment support, examples, and safety limits](docs/attachments.md).
-Parsing runs on the Worker for remote chat clients; no local helper is required.
+The canonical flow source is generated at
+`power-automate/microsoft-bypass-flow/definition.json` from the immutable
+sanitized fixture plus authored fixed-operation extensions:
 
-Tests use the existing Vitest workflow with Cloudflare's official
-[`@cloudflare/vitest-plugin`](https://developers.cloudflare.com/workers/testing/vitest-integration/)
-integration, configured from `wrangler.jsonc`. Hono request tests and synthetic
-attachment fixtures run through `bun run test`; there is no separate runtime-test
-script or direct Miniflare dependency.
+```sh
+python3 scripts/build_attachment_flow.py
+python3 scripts/build_attachment_flow.py --check
+bun run test:flow
+```
+
+The flow source extends the existing flow in place. It preserves the same HTTP
+trigger, gateway-key guard, operation switch, and Outlook connection convention.
+It adds controlled Outlook scope/filter/pagination/folder/conversation reads,
+keeps the attachment branches and safety gates, and adds native OneDrive for
+Business operation branches.
+
+The public JSON is source for review/manual update, not a deployable package.
+OneDrive connector binding and the official `FindFiles.findMode` machine value
+must be verified during a separately authorized manual import/update. No live
+flow run, connector creation, or deployment is performed by this repository.
+
+See:
+
+- `SPEC.md` for the authoritative contract.
+- `docs/read-tools.md` for tool behavior and limits.
+- `docs/attachments.md` for attachment/file parser safety limits.
+- `power-automate/microsoft-bypass-flow/README.md` for flow provenance and manual update notes.
 
 ## Requirements
 
@@ -52,35 +75,36 @@ script or direct Miniflare dependency.
 
 ## Configuration
 
-`.dev.vars.example` に従ってPower Automate側のURLを参照
+`.dev.vars.example` に従ってPower Automate側のURLを参照:
 
-```
+```sh
 POWER_AUTOMATE_URL=https://prod-xxx.logic.azure.com/workflows/xxx/triggers/manual/paths/invoke
 POWER_AUTOMATE_GATEWAY_KEY=<gateway key>
 ```
 
-For production, set these as Worker secrets/vars (`wrangler secret put`).
+For production, set secrets/vars with Wrangler. Never commit the trigger URL or
+key.
 
 ## Development
 
 ```sh
 bun install
-bun run dev          # local Worker (wrangler dev)
+bun run dev
 ```
 
 ## Quality checks
 
 ```sh
-bun run typecheck    # tsc --noEmit
-bun run lint         # oxlint
-bun run lint:types   # oxlint --type-aware
-bun run format:check # oxfmt --check
-bun run test         # vitest
-bun run test:flow    # offline flow contract tests
+bun run typecheck
+bun run lint
+bun run lint:types
+bun run format:check
+bun run test
+bun run test:flow
 ```
 
 ## Deploy
 
 ```sh
-bun run deploy       # wrangler deploy
+bun run deploy
 ```
