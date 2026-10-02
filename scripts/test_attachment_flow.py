@@ -16,7 +16,9 @@ import re
 import unittest
 from urllib.parse import quote
 
-from build_attachment_flow import ATTACHMENT_OPERATIONS, BASELINE, BASE64_CHUNK, DESTINATION, FORBIDDEN_ID_CODEPOINTS, GRAPH_ROOT, ID_SCHEMA, MAIL_OPERATIONS, MAX_BASE64, MAX_BYTES, build_definition
+from build_attachment_flow import ATTACHMENT_OPERATIONS, BASELINE, BASE64_CHUNK, DESTINATION, FORBIDDEN_ID_CODEPOINTS, GRAPH_ROOT, ID_SCHEMA, MAIL_OPERATIONS, MAX_BASE64, MAX_BYTES, build_definition, get_case, list_case
+
+from clipboard_compat import transform_json
 
 from build_read_tools_flow import ARGUMENTS, REQUIRED_ARGS
 from build_draft_tools_flow import DRAFT_ARGUMENTS, DRAFT_OPERATIONS, DRAFT_REQUIRED_ARGS
@@ -438,15 +440,24 @@ class StaticContracts(unittest.TestCase):
             self.assertFalse(envelope["additionalProperties"])
 
     def test_expansion_preserves_original_attachments_and_all_authentication(self):
-        # Mail branches are intentionally v2. Attachment cases stay byte-for-
-        # byte equivalent to their original canonical, sorted JSON contracts.
-        hashes = {
+        # Mail branches are intentionally v2. Pin original attachment content
+        # separately from the sole allowed lexical compatibility rewrite; all
+        # other values/topology/security/network content remain exact.
+        originals = {"list_attachments": list_case(), "get_attachment": get_case()}
+        original_hashes = {
             "list_attachments": "b47f9ee3526ff045892ede06bd3bc7941a24a1d0d621421b6c46f88156f2f6bc",
             "get_attachment": "ae381560356c8335ebf89337619edd15953020108d157473f2cbdf319a279894",
         }
-        for name, expected in hashes.items():
+        compatible_hashes = {
+            "list_attachments": "e484ea3792ce1087c460a95841103e808c3855acae94de938e9b5932ffb8261e",
+            "get_attachment": "4db4c27892b200b70c6445391933d9ff9f2b24619834cc00513ab8d82c07651d",
+        }
+        for name, expected in original_hashes.items():
+            original = json.dumps(originals[name], sort_keys=True, separators=(",", ":")).encode()
+            self.assertEqual(hashlib.sha256(original).hexdigest(), expected)
+            self.assertEqual(ATTACHMENT_CASES[name], transform_json(originals[name]))
             canonical = json.dumps(ATTACHMENT_CASES[name], sort_keys=True, separators=(",", ":")).encode()
-            self.assertEqual(hashlib.sha256(canonical).hexdigest(), expected)
+            self.assertEqual(hashlib.sha256(canonical).hexdigest(), compatible_hashes[name])
         original_trigger, expanded_trigger = deepcopy(BASELINE_SOURCE["triggers"]), deepcopy(SOURCE["triggers"])
         # Explicit v2 privacy addition. Every other trigger setting, including
         # the gateway-key condition and authentication, remains identical.

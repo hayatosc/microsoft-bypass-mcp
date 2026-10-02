@@ -47,6 +47,31 @@ Relative to that fixture, the generated source:
 
 No generic proxy branch is introduced.
 
+## Classic designer clipboard compatibility
+
+After the read/draft augmentations, `scripts/build_attachment_flow.py` applies
+`scripts/clipboard_compat.py` only to the completed `actions` subtree. It parses
+WDL tokens and replaces actual empty string literals (`''`) with `string(null)`;
+this is not a global apostrophe replacement. Nonempty strings, doubled-apostrophe
+escapes, literal text, interpolation boundaries, JSON types, action topology and
+connector/auth/security settings remain exact. Trigger, parameters (including
+sanitized auth placeholders), and every other top-level value are untouched.
+The immutable provenance fixture is never transformed.
+
+The classic designer's native clipboard roundtrip previously corrupted 37 WDL
+leaves containing empty literals. The validated compatibility candidate changes
+1,149 tokens across those 37 action-value paths, with no key changes.
+Microsoft's [official `string` reference](https://learn.microsoft.com/en-us/azure/logic-apps/expression-functions-reference#string)
+explicitly guarantees `string(null)` produces an empty **String**, not null.
+
+Independent **unsaved** native classic-designer clipboard roundtrip validation
+passed for the candidate: all token values and types survived in the 37 affected
+leaves; five WDL leaves changed only whitespace, and all 14 cases and connector
+references remained. This was not a save, deployment, connector execution or mail
+test. Local tests are offline lexical/source contracts and synthetic behavior
+replays, **not Microsoft runtime tests**. Any save or live test still requires
+separate authorization; this source integration performs neither.
+
 ## Outlook contract notes
 
 `list_messages` supports inbox, sent items, all messages, or a specific mail
@@ -158,10 +183,12 @@ The Worker no-persistence rule remains separate.
 
 ## Rebuild and offline checks
 
-`build_attachment_flow.py` retains the original attachment cases and calls
-`build_read_tools_flow.py` to augment the same definition with reviewed mail and
-OneDrive branches. No second deployable flow is generated. Attachment case hashes
-and the immutable original fixture are pinned by regression tests.
+`build_attachment_flow.py` retains the original attachment cases, calls
+`build_read_tools_flow.py` and `build_draft_tools_flow.py` to augment the same
+definition, then applies the actions-only clipboard compatibility pass. No second
+deployable flow is generated. Regression tests pin the original attachment hashes
+as provenance, the precise compatible attachment content/hashes, the immutable
+fixture, and deterministic canonical bytes matching the validated candidate.
 
 ```sh
 python3 scripts/build_attachment_flow.py
