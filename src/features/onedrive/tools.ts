@@ -83,14 +83,16 @@ export function registerOneDriveTools(server: McpServer, client: PowerAutomateCl
     {
       title: 'List OneDrive folder',
       description:
-        "List metadata for files in the signed-in account's OneDrive root or an owned folder ID returned by another OneDrive tool. The connector may indicate more native results, but URLs and cursors are never returned or accepted. " +
+        "List metadata for files in the signed-in account's OneDrive root or an owned folder ID returned by another OneDrive tool. Native child-folder pagination aggregates a bounded window of up to 1,000 items; root listing uses its returned array. Pass nextCursor with the same folderId and limit to continue within that re-fetched window. If the window changes, restart without a cursor. hasMore may remain true with nextCursor null when upstream data is incomplete; this is not unlimited enumeration. No upstream URLs are exposed or followed by the Worker. " +
         untrusted,
       inputSchema: oneDriveListFolderInputSchema,
       outputSchema: oneDriveListFolderOutputSchema,
       annotations,
     },
-    async ({ folderId, limit }) =>
-      guarded(async () => oneDriveResult(await listOneDriveFolder(client, folderId, limit))),
+    async ({ folderId, limit, cursor }) =>
+      guarded(async () =>
+        oneDriveResult(await listOneDriveFolder(client, folderId, limit, cursor)),
+      ),
   )
   server.registerTool(
     'onedrive_get_metadata',

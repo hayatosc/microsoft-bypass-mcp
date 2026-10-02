@@ -7,6 +7,7 @@ import { DocumentSourceError, boundedToolResult } from '../documents/source.js'
 import { OneDriveError } from '../onedrive/service.js'
 import { registerOneDriveTools } from '../onedrive/tools.js'
 import { registerAttachmentTools } from './attachments/tools.js'
+import { registerDraftTools } from './drafts/tools.js'
 import {
   normalizeConversation,
   normalizeMailFolders,
@@ -35,6 +36,9 @@ export const TOOL_NAMES = [
   'outlook_list_attachments',
   'outlook_inspect_attachment',
   'outlook_read_attachment',
+  'outlook_create_draft',
+  'outlook_create_reply_draft',
+  'outlook_add_draft_attachment',
   'onedrive_search_files',
   'onedrive_list_folder',
   'onedrive_get_metadata',
@@ -355,7 +359,7 @@ function annotations() {
 }
 
 export function createOutlookMcpServer(client: PowerAutomateClient): McpServer {
-  const server = new McpServer({ name: 'university-m365', version: '0.2.0' })
+  const server = new McpServer({ name: 'university-m365', version: '0.3.0' })
   server.registerTool(
     'outlook_list_messages',
     {
@@ -549,6 +553,7 @@ export function createOutlookMcpServer(client: PowerAutomateClient): McpServer {
     },
   )
   registerAttachmentTools(server, client)
+  registerDraftTools(server, client)
   registerOneDriveTools(server, client)
   return server
 }

@@ -3,7 +3,7 @@
 `definition.json` is the single canonical source for extending the existing
 `microsoft bypass flow` in place. It preserves the same HTTP trigger, gateway-key
 condition, operation switch, and public connector/auth parameter convention while
-expanding the fixed read-only operation surface.
+expanding the fixed read and draft-only operation surface.
 
 This is sanitized Workflow Definition Language source for review and authorized
 manual update. It is **not** an importable package, Dataverse solution, connector
@@ -11,11 +11,12 @@ creation script, or live deployment artifact.
 
 ## Current authored scope
 
-The flow switch contains 11 backing operations for 13 MCP tools:
+The flow switch contains 14 backing operations for 16 MCP tools:
 
 - Outlook mail: `list_messages`, `search_messages`, `get_message`,
   `list_mail_folders`, `get_conversation`
 - Outlook attachments: `list_attachments`, `get_attachment`
+- Outlook drafts: `create_draft`, `create_reply_draft`, `add_draft_attachment`
 - OneDrive native: `onedrive_search_files`, `onedrive_list_folder`,
   `onedrive_get_metadata`, `onedrive_get_content`
 
@@ -35,11 +36,14 @@ Relative to that fixture, the generated source:
 1. Replaces the trigger operation enum with the fixed flow-operation allowlist.
 2. Keeps the trigger's authentication/key guard, switch, default branch and existing
    parameters, while adding two fixed, empty-default OneDrive search Compose settings.
-3. Rebuilds the switch cases as sanitized fixed read operations.
+3. Rebuilds the switch cases as sanitized fixed read and draft-only operations.
 4. Adds controlled Outlook mailbox/folder/filter/pagination/conversation support.
 5. Keeps attachment metadata/content branches with request-local byte transport and
    size/type/base64 gates.
-6. Adds native OneDrive for Business operation branches.
+6. Adds native OneDrive for Business branches, with supported native folder
+   pagination aggregated into a bounded 1,000-item metadata window.
+7. Adds draft creation, sender-reply draft creation, and attachment upload only
+   after a fixed lookup verifies the matching target is a draft. No send action.
 
 No generic proxy branch is introduced.
 
@@ -59,6 +63,15 @@ mismatched `conversationId` or duplicate ID.
 All Outlook IDs are independently `uriComponent`-encoded. A caller-supplied `%`
 is encoded again and cannot become a path separator or query delimiter.
 
+## Draft rollout notes
+
+See [`docs/drafts.md`](../../docs/drafts.md) for the approval, argument, attachment
+transfer, permission, and ambiguous-outcome contract. The existing Outlook
+connection must support `Mail.ReadWrite`; do not add consent or credentials
+without authorization. All draft POST actions disable retries. An ambiguous
+failure may leave a draft or attachment saved, so inspect before retrying.
+The public source remains sanitized and must not contain live bindings or keys.
+
 ## OneDrive contract notes
 
 OneDrive branches use only the native OneDrive for Business connector:
@@ -71,6 +84,14 @@ OneDrive branches use only the native OneDrive for Business connector:
 | `onedrive_get_metadata` | `GetFileMetadata` |
 | `onedrive_get_content` metadata preflight | `GetFileMetadata` |
 | `onedrive_get_content` bytes | `GetFileContent` |
+
+Only `ListFolderV2` enables native `paginationPolicy.minimumItemCount: 1000`.
+The operation's Pagination setting was verified in the existing designer; its
+native continuation happens within the connector runtime. The flow takes at
+most 1,000 records and flags the threshold/continuation as potentially incomplete.
+No arbitrary nextLink HTTP replay or guessed skip token is introduced.
+`ListRootFolder` remains an array-returning operation. `FindFiles` remains capped
+at 100 with no supported continuation; pagination does not expand search coverage.
 
 The generated source intentionally contains these visible placeholders:
 
@@ -116,7 +137,8 @@ New authored branches use fixed errors such as `INVALID_REQUEST`,
 `INVALID_ARGUMENTS`, `UPSTREAM_ERROR`, `INVALID_ATTACHMENT_METADATA`,
 `INVALID_ATTACHMENT_CONTENT`, `INVALID_ONEDRIVE_METADATA`,
 `INVALID_ONEDRIVE_CONTENT`, `UNSUPPORTED_ONEDRIVE_FILE_TYPE`, and
-`ONEDRIVE_FILE_TOO_LARGE`.
+`ONEDRIVE_FILE_TOO_LARGE`. Draft errors also use a fixed ambiguous-write warning
+that instructs the caller to inspect Drafts before retrying.
 
 Errors do not echo queries, subjects, IDs, names, URLs, raw connector text,
 bytes, or base64. Platform-level trigger rejection or gateway rejection can still

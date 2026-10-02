@@ -308,7 +308,8 @@ def build_definition():
     cases["list_attachments"] = list_case()
     cases["get_attachment"] = get_case()
     from build_read_tools_flow import augment_read_tools
-    return augment_read_tools(definition)
+    from build_draft_tools_flow import augment_draft_tools
+    return augment_draft_tools(augment_read_tools(definition))
 
 
 def main():

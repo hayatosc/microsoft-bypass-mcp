@@ -11,6 +11,8 @@ import re
 import unittest
 from urllib.parse import parse_qs, quote, urlsplit
 
+from build_draft_tools_flow import DRAFT_OPERATIONS
+
 from test_attachment_flow import (
     BASELINE_SOURCE, DESTINATION, FORBIDDEN_ID_CODEPOINTS, GRAPH_ROOT,
     MAX_BASE64, MAX_BYTES, REQUEST_ID, ROOT, SOURCE, Expressions, Flow,
@@ -30,6 +32,7 @@ TOOLS = {
     "onedrive_search_files", "onedrive_list_folder", "onedrive_get_metadata",
     "onedrive_inspect_file", "onedrive_read_file",
 }
+DRAFT_TOOLS = {"outlook_create_draft", "outlook_create_reply_draft", "outlook_add_draft_attachment"}
 SUMMARY = "id,subject,from,receivedDateTime,sentDateTime,parentFolderId,conversationId,hasAttachments,importance,isRead,bodyPreview"
 DETAIL = SUMMARY + ",toRecipients,ccRecipients,body"
 FOLDERS = "id,displayName,parentFolderId,childFolderCount,totalItemCount,unreadItemCount"
@@ -94,20 +97,24 @@ def all_named_actions():
 
 
 class ExpandedStaticContracts(unittest.TestCase):
-    def test_exact_eleven_operations_and_thirteen_fixed_tools(self):
+    def test_exact_read_surface_plus_three_fixed_draft_operations_and_tools(self):
         self.assertEqual(len(OPERATIONS), 11)
-        self.assertEqual(set(CASES), OPERATIONS)
-        self.assertEqual(set(SOURCE["triggers"]["manual"]["inputs"]["schema"]["properties"]["operation"]["enum"]), OPERATIONS)
+        self.assertEqual(set(DRAFT_OPERATIONS), {"create_draft", "create_reply_draft", "add_draft_attachment"})
+        self.assertEqual(set(CASES), OPERATIONS | set(DRAFT_OPERATIONS))
+        self.assertEqual(set(SOURCE["triggers"]["manual"]["inputs"]["schema"]["properties"]["operation"]["enum"]), OPERATIONS | set(DRAFT_OPERATIONS))
         source = (ROOT / "src/features/outlook/server.ts").read_text()
         surface = source.split("export const TOOL_NAMES = [", 1)[1].split("] as const", 1)[0]
-        self.assertEqual(set(re.findall(r"'([^']+)'", surface)), TOOLS)
+        self.assertEqual(set(re.findall(r"'([^']+)'", surface)), TOOLS | DRAFT_TOOLS)
         self.assertEqual(len(TOOLS), 13)
         # No generic URL, method, query-option or connector controls in any case.
         for case in CASES.values():
             operation = case["case"]
             schema = case["actions"][f"Validate_{operation}_args"]["inputs"]["schema"]
             self.assertFalse(schema["additionalProperties"])
-            self.assertTrue(set(schema["properties"]).isdisjoint({"url", "uri", "method", "body", "nextLink", "operationId", "findMode", "rootId"}))
+            forbidden = {"url", "uri", "method", "nextLink", "operationId", "findMode", "rootId"}
+            if operation not in DRAFT_OPERATIONS:
+                forbidden.add("body")  # Draft bodies are bounded plain text, not a passthrough.
+            self.assertTrue(set(schema["properties"]).isdisjoint(forbidden))
 
     def test_json_has_no_duplicate_keys_and_all_dependencies_are_siblings(self):
         def unique_pairs(pairs):
@@ -138,7 +145,8 @@ class ExpandedStaticContracts(unittest.TestCase):
             "OneDrive_get_content": ("GetFileContent", {"id", "inferContentType"}),
         }
         graph_names = {"Graph_list_messages", "Graph_search_messages", "Graph_get_message", "Graph_list_mail_folders", "Graph_get_conversation", "Graph_list_attachments", "Graph_attachment_metadata", "Graph_attachment_content"}
-        actual = {name: action for name, action in all_named_actions().items() if action["type"] == "OpenApiConnection"}
+        read_cases = {name: CASES[name] for name in OPERATIONS}
+        actual = {name: action for group in action_maps(read_cases) for name, action in group.items() if action.get("type") == "OpenApiConnection"}
         self.assertEqual(set(actual), set(native) | graph_names)
         for name, action in actual.items():
             inputs = action["inputs"]
@@ -362,7 +370,7 @@ class ExpandedExecutionContracts(unittest.TestCase):
     def test_mail_and_native_counts_and_offsets_are_typed_and_bounded(self):
         for operation, args in VALID_ARGS.items():
             if "top" in args:
-                maximum = 100 if operation.startswith("onedrive_") else 50
+                maximum = 1000 if operation == "onedrive_list_folder" else 100 if operation == "onedrive_search_files" else 50
                 for top in (0, maximum + 1, True, "1", 1.5):
                     self.assert_error(configured_flow(operation, dict(args, top=top)), 400)
         for operation in ("list_messages", "get_conversation", "list_attachments"):

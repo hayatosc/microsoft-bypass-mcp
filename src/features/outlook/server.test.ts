@@ -57,7 +57,7 @@ async function connectClient(client: PowerAutomateClient): Promise<Client> {
 }
 
 describe('createOutlookMcpServer', () => {
-  it('registers the fixed read-only tools', async () => {
+  it('registers the fixed tools with expected annotations', async () => {
     const { fetchFn } = mockFlow({ value: [] })
     const mcpClient = await connectClient(
       new PowerAutomateClient({
@@ -68,7 +68,23 @@ describe('createOutlookMcpServer', () => {
     )
     const { tools } = await mcpClient.listTools()
     expect(tools.map((tool) => tool.name).sort()).toEqual([...TOOL_NAMES].sort())
-    expect(tools.every((tool) => tool.annotations?.readOnlyHint === true)).toBe(true)
+    const draftNames = new Set([
+      'outlook_create_draft',
+      'outlook_create_reply_draft',
+      'outlook_add_draft_attachment',
+    ])
+    for (const tool of tools) {
+      if (draftNames.has(tool.name)) {
+        expect(tool.annotations).toMatchObject({
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: true,
+        })
+      } else {
+        expect(tool.annotations?.readOnlyHint).toBe(true)
+      }
+    }
   })
   it('outlook_list_messages translates limit to top and returns summaries', async () => {
     const { records, fetchFn } = mockFlow({ value: [graphSummaryItem] })

@@ -25,7 +25,21 @@ export interface PowerAutomateOperations {
   get_conversation: { args: { conversationId: string; top: number; skip?: number } }
   list_attachments: { args: { messageId: string; top: number; skip: number } }
   get_attachment: { args: { messageId: string; attachmentId: string } }
+  create_draft: {
+    args: {
+      to: string[]
+      cc?: string[] | undefined
+      bcc?: string[] | undefined
+      subject: string
+      body: string
+    }
+  }
+  create_reply_draft: { args: { messageId: string; body: string } }
+  add_draft_attachment: {
+    args: { draftId: string; name: string; contentType: string; contentBytes: string }
+  }
   onedrive_search_files: { args: { query: string; top: number } }
+  // Internal folder window top is 1..1000; MCP page limits stay 1..100.
   onedrive_list_folder: { args: { folderId?: string; top: number } }
   onedrive_get_metadata: { args: { fileId: string } }
   onedrive_get_content: { args: { fileId: string } }
@@ -47,10 +61,25 @@ const successEnvelopeSchema = z.object({
   data: z.unknown(),
 })
 
+const ambiguousWriteOperations = new Set<PowerAutomateOperation>([
+  'create_draft',
+  'create_reply_draft',
+  'add_draft_attachment',
+])
+
 export class PowerAutomateError extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'PowerAutomateError'
+  }
+}
+
+export class PowerAutomateAmbiguousWriteError extends PowerAutomateError {
+  constructor(operation: PowerAutomateOperation, cause: 'failed' | 'timed out') {
+    super(
+      `${operation} ${cause}; write outcome is ambiguous. Inspect Drafts before retrying and never blind retry.`,
+    )
+    this.name = 'PowerAutomateAmbiguousWriteError'
   }
 }
 
@@ -87,6 +116,8 @@ export class PowerAutomateClient {
       status = response.status
       if (!response.ok) {
         await response.body?.cancel()
+        if (ambiguousWriteOperations.has(operation))
+          throw new PowerAutomateAmbiguousWriteError(operation, 'failed')
         throw new PowerAutomateError(`${operation} failed with HTTP status ${response.status}`)
       }
       const body = await readBoundedJson(response, signal, operation)
@@ -100,6 +131,13 @@ export class PowerAutomateClient {
       success = true
       return parsed.data.data
     } catch (error) {
+      if (ambiguousWriteOperations.has(operation)) {
+        if (error instanceof PowerAutomateAmbiguousWriteError) throw error
+        throw new PowerAutomateAmbiguousWriteError(
+          operation,
+          signal.aborted ? 'timed out' : 'failed',
+        )
+      }
       if (error instanceof PowerAutomateError) throw error
       if (signal.aborted) throw new PowerAutomateError(`${operation} timed out`)
       throw new PowerAutomateError(`${operation} failed to complete the request`)
@@ -133,7 +171,12 @@ async function readBoundedJson(
     'onedrive_list_folder',
     'onedrive_get_metadata',
   ])
-  const maxBytes = listOperations.has(operation) ? 256 * 1024 : 6 * 1024 * 1024
+  const maxBytes =
+    operation === 'onedrive_list_folder'
+      ? 4 * 1024 * 1024
+      : listOperations.has(operation)
+        ? 256 * 1024
+        : 6 * 1024 * 1024
   const length = Number(response.headers.get('content-length') ?? 0)
   if (length > maxBytes) {
     await response.body?.cancel()

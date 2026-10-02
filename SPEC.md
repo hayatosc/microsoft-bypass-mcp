@@ -1,13 +1,14 @@
-# University Microsoft 365 Read-only MCP — Specification
+# University Microsoft 365 MCP — Specification
 
 ## 1. Overview
 
-A read-only [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server
-that lets an LLM read selected university Microsoft 365 resources through a
+A fixed [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server
+that lets an LLM read selected university Microsoft 365 resources and save
+explicitly requested Outlook drafts through a
 Power Automate HTTP-trigger intermediary.
 
 The server is **not** a Microsoft Graph MCP. It is a fixed, allow-listed surface
-of read tools that map onto fixed operations, which Power Automate turns into
+of read and draft-only tools that map onto fixed operations, which Power Automate turns into
 fixed Outlook Graph calls or native OneDrive for Business connector calls. The
 server never authenticates to Microsoft Graph and never talks to Graph directly.
 
@@ -28,10 +29,10 @@ Microsoft 365 connectors
 The boundary is fixed:
 
 ```
-MCP tool -> fixed operation -> Power Automate switch case -> fixed read action
+MCP tool -> fixed operation -> Power Automate switch case -> fixed read/draft action
 ```
 
-No layer accepts a caller-provided URL, route, method, body, Graph query, drive
+No layer accepts a caller-provided URL, route, method, raw Graph body, Graph query, drive
 ID, site ID, share link, download URL, or nextLink URL.
 
 ## 3. Authentication and environment
@@ -72,7 +73,7 @@ The flow has no storage, cache, loops over untrusted URLs, or persistence.
 
 ## 5. Fixed tool surface
 
-The intended Worker-facing MCP surface contains 13 read-only tools:
+The Worker-facing MCP surface contains 13 read-only tools and 3 draft-only tools:
 
 | Tool | Backing operation | Scope |
 | --- | --- | --- |
@@ -84,13 +85,16 @@ The intended Worker-facing MCP surface contains 13 read-only tools:
 | `outlook_list_attachments` | `list_attachments` | Attachment metadata only. |
 | `outlook_inspect_attachment` | `get_attachment` | Worker parses one bounded file attachment. |
 | `outlook_read_attachment` | `get_attachment` | Worker extracts bounded attachment text/cells/pages. |
+| `outlook_create_draft` | `create_draft` | Save a new plain-text draft. |
+| `outlook_create_reply_draft` | `create_reply_draft` | Save a sender-reply draft without sending. |
+| `outlook_add_draft_attachment` | `add_draft_attachment` | Add a bounded file attachment to a verified draft. |
 | `onedrive_search_files` | `onedrive_search_files` | Native OneDrive owned-file search. |
-| `onedrive_list_folder` | `onedrive_list_folder` | Native root/folder listing. |
+| `onedrive_list_folder` | `onedrive_list_folder` | Native bounded folder aggregation and scope/window-bound MCP pages. |
 | `onedrive_get_metadata` | `onedrive_get_metadata` | Native metadata projection. |
 | `onedrive_inspect_file` | `onedrive_get_content` | Worker parses one bounded OneDrive file. |
 | `onedrive_read_file` | `onedrive_get_content` | Worker extracts bounded OneDrive content. |
 
-The flow has 11 operations because Outlook inspect/read share `get_attachment`
+The flow has 14 operations because Outlook inspect/read share `get_attachment`
 and OneDrive inspect/read share `onedrive_get_content`.
 
 ## 6. Outlook operations
@@ -247,14 +251,31 @@ Returns a bounded page with `value` and `truncated`. Native nextLink presence is
 folded into that flag without exposing the URL. If native `FindFiles`
 returns exactly the connector/requested maximum, the result is conservatively
 marked potentially truncated; the server must not claim complete enumeration.
+Native search has no supported continuation input; no artificial search cursor
+is provided, and this extension does not expand search beyond its 100-result cap.
 
 ### `onedrive_list_folder`
 
-Args: `{ "folderId"?: "bounded ID", "top": 1..100 }`.
+Internal args: `{ "folderId"?: "bounded ID", "top": 1..1000 }`.
+The Worker always requests a fixed 1,000-record window; MCP input `limit` remains
+1–100 and optional `cursor` is interpreted only by the Worker.
 
 Omitted `folderId` uses `ListRootFolder`; present `folderId` uses
-`ListFolderV2(id)`. `ListFolderV2` native `nextLink` is never returned or
-accepted as input. The Worker uses only a bounded incomplete flag.
+`ListFolderV2(id)` with its supported native `paginationPolicy.minimumItemCount`
+set to 1,000. Runtime aggregation may overshoot the threshold; flow projection
+still takes at most 1,000. Reaching the cap or native continuation is flagged
+incomplete. No unverified pagination setting is added to `ListRootFolder`.
+
+The Worker validates at most 1,000 records within a 4 MiB transport ceiling,
+then returns at most the requested MCP limit. A canonical opaque cursor binds
+version, operation, folder/root scope, limit, ordered-window fingerprint, and a
+bounded offset. Each continuation re-fetches and validates the same window;
+changed scope/limit, stale windows, duplicate IDs, and out-of-range offsets fail
+safely. No metadata is cached. Only known remaining records yield `nextCursor`;
+upstream incompleteness can leave `hasMore: true` with no usable cursor. This
+expands named-folder coverage beyond one native page but not beyond the bounded
+window. Native nextLink is never returned, caller-supplied, or followed by the
+Worker. See [`docs/read-tools.md`](docs/read-tools.md) for caller behavior.
 
 ### `onedrive_get_metadata`
 
@@ -297,8 +318,9 @@ and exact `..`. Each ID path segment is encoded with `uriComponent`; caller `%`
 characters are encoded again and never become structural path separators.
 
 Queries are trimmed, nonempty, and at most 512 UTF-16 code units. Date filters
-must be ISO datetime-like strings. List outputs are bounded to the requested top
-and never exceed 50 Outlook items or 100 OneDrive items.
+must be ISO datetime-like strings. MCP list outputs are bounded to the requested
+limit and never exceed 50 Outlook items or 100 OneDrive items. The internal
+folder aggregation window is separately bounded to 1,000 metadata records.
 
 All returned message text, attachment content, and OneDrive extracted content is
 untrusted external content. The MCP server must preserve provenance and never
@@ -328,3 +350,12 @@ execute a live flow.
 
 Live flow runs, connector rebinding, deployment, and merge require separate
 authorization. The public flow source is not an importable package.
+
+
+## Draft-only writes
+
+See [`docs/drafts.md`](docs/drafts.md) for the authoritative draft argument,
+attachment-transfer, approval, and retry contract. All three tools are writes
+and non-idempotent. Only fixed `/me/messages` create/reply/attachment operations
+are allowed, with no sending, deletion, generic HTTP input, or automatic POST
+retry. The Worker remains stateless; only the requested Outlook draft persists.

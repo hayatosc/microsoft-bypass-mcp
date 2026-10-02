@@ -12,18 +12,22 @@ import { createAccessAuth } from './lib/access-auth.js'
 import { getPowerAutomateGatewayKey, getPowerAutomateUrl } from './lib/env.js'
 import type { Bindings } from './lib/env.js'
 import { PowerAutomateClient } from './lib/power-automate.js'
+import { boundedRequestBody } from './lib/request-body-limit.js'
+
+const MCP_REQUEST_BODY_LIMIT_BYTES = 4 * 1024 * 1024
 
 const app = new Hono<{ Bindings: Bindings }>()
 
 app.get('/', (c) =>
   c.json({
     name: 'university-m365',
-    version: '0.1.0',
+    version: '0.3.0',
     tools: TOOL_NAMES,
   }),
 )
 
 app.use('/mcp', createAccessAuth())
+app.use('/mcp', boundedRequestBody(MCP_REQUEST_BODY_LIMIT_BYTES))
 
 app.all('/mcp', (c) => {
   // Fresh, stateless server + handler per request; no state survives.

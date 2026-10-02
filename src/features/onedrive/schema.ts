@@ -39,10 +39,17 @@ export const oneDriveSearchOutputSchema = z
     truncated: z.boolean(),
   })
   .strict()
+export const ONE_DRIVE_FOLDER_WINDOW_SIZE = 1000
+export const oneDriveFolderCursorSchema = z
+  .string()
+  .min(1)
+  .max(1024)
+  .regex(/^[A-Za-z0-9_-]+$/)
 export const oneDriveListFolderInputSchema = z
   .object({
     folderId: oneDriveFileIdSchema.optional(),
     limit: z.number().int().min(1).max(100).default(50),
+    cursor: oneDriveFolderCursorSchema.optional(),
   })
   .strict()
 export const oneDriveListFolderOutputSchema = z
@@ -50,7 +57,7 @@ export const oneDriveListFolderOutputSchema = z
     folderId: z.string().nullable(),
     files: z.array(oneDriveMetadataSchema).max(100),
     hasMore: z.boolean(),
-    nextCursor: z.null(),
+    nextCursor: oneDriveFolderCursorSchema.nullable(),
     incompleteReason: z.string().nullable(),
     truncated: z.boolean(),
   })
