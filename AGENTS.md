@@ -3,11 +3,12 @@
 ## Project
 
 University Microsoft 365 Read-only MCP — a read-only [Model Context Protocol](https://modelcontextprotocol.io)
-server (Cloudflare Workers + Hono) exposing fixed read tools for university
-Microsoft 365 resources through a Power Automate HTTP-trigger intermediary. The
-current implementation covers Outlook mailbox reads, Outlook attachment reads,
-and authored OneDrive for Business owned-file reads. See [`SPEC.md`](./SPEC.md)
-for the authoritative specification and [`README.md`](./README.md) for a summary.
+server (Cloudflare Workers + Hono) exposing read tools for university Microsoft
+365 resources through a Power Automate HTTP-trigger intermediary. The current
+implementation covers the Outlook mailbox (six tools); other Microsoft 365
+apps (Teams, OneDrive, etc.) are added as new features. See
+[`SPEC.md`](./SPEC.md) for the authoritative specification and
+[`README.md`](./README.md) for a summary.
 
 ## Commands
 
@@ -36,34 +37,30 @@ src/
   lib/env.ts               # Bindings + validated env access (fail fast)
   lib/access-auth.ts       # Cloudflare Access JWT validation middleware
   lib/power-automate.ts    # stateless Power Automate client
-  features/outlook/        # Outlook schemas, normalization, attachment parsing
-  features/onedrive/       # native-connector owned-file adapters and tools
-  features/documents/      # shared bounded parser dispatch/source adapter
-scripts/
-  build_attachment_flow.py # canonical flow generator for Outlook + OneDrive ops
-  build_read_tools_flow.py # augments that definition; no second flow output
-  test_attachment_flow.py  # offline flow contract/redaction tests
-  test_read_tools_flow.py  # extension routing, native gates and contract tests
-power-automate/
-  microsoft-bypass-flow/   # generated canonical flow source + manual update notes
+  features/outlook/
+    server.ts              # createOutlookMcpServer factory (3 mail + 3 attachment tools)
+    schema.ts              # zod schemas (tool I/O + message shapes)
+    normalize.ts           # Graph response -> normalized shapes
 ```
 
 ## Hard constraints
 
-- **Read-only fixed surface.** The surface has 13 read tools backed by 11 fixed operations,
-  documented in `SPEC.md`: Outlook message/folder/conversation/attachment reads
-  and OneDrive owned-file search/list/metadata/inspect/read backing operations.
-  Never add a generic Graph, Outlook, OneDrive, URL, method, body, query, or
-  nextLink passthrough tool.
-- **No persistence.** Never store mail or file data in DB/KV/R2/cache. Mail/file
-  data must not outlive a request.
-- **Logging hygiene.** Never log the Power Automate URL, queries, subjects,
-  message IDs, file IDs, body text, bytes, base64, or nextLink URLs. The Worker
-  logs only `type`, `requestId`, `operation`, `durationMs`, `status`, and `success`.
-- **Auth.** Cloudflare Access (OAuth) stays in front of the Worker and in-Worker
-  Access JWT validation remains defense in depth. Do not add app-level auth back.
-- Secrets (`POWER_AUTOMATE_URL`, `POWER_AUTOMATE_GATEWAY_KEY`, `TEAM_DOMAIN`,
-  `POLICY_AUD`) must never be committed.
+- **Read-only.** Only the six fixed tools (`outlook_list_messages`,
+  `outlook_search_messages`, `outlook_get_message`, `outlook_list_attachments`,
+  `outlook_inspect_attachment`, `outlook_read_attachment`). Never add a generic Graph
+  proxy tool (`{ url, method, body }` passthrough).
+- **No persistence.** Never store mail data (no DB/KV/R2/cache). Mail data must
+  not outlive a request.
+- **Logging hygiene.** Never log the Power Automate URL, mail bodies, queries,
+  subjects, or message IDs; the client emits one structured log entry per call
+  with only `type` + `requestId` + `operation` + `durationMs` + `status` + `success`.
+- **Auth** is Cloudflare Access (OAuth) in front of the Worker, plus in-Worker
+  validation of the Access JWT (`Cf-Access-Jwt-Assertion`). Keep both; do not add
+  app-level auth back.
+- `POWER_AUTOMATE_URL` and `POWER_AUTOMATE_GATEWAY_KEY` live in `.dev.vars`
+  (gitignored); `POWER_AUTOMATE_GATEWAY_KEY`, `TEAM_DOMAIN` and
+  `POLICY_AUD` are set as Cloudflare Workers secrets (`wrangler secret put`).
+  Never commit any of them.
 
 ## Conventions
 
@@ -72,25 +69,17 @@ power-automate/
   `McpServer` + `registerTool` behind `createMcpHandler` (fresh server per request).
 - Docs and code comments in English.
 
-## Flow-source safety
+## Attachment safety
 
-- Evolve `power-automate/microsoft-bypass-flow/definition.json` only through
-  `scripts/build_attachment_flow.py`. The sanitized pre-attachment fixture in
-  `scripts/fixtures/` is immutable and remains a provenance fixture, not another
-  flow source.
-- Preserve the existing trigger/auth/gateway shape and extend the same switch.
-  Do not introduce a parallel flow, a second trigger, or connector creation.
-- Keep attachment bytes and OneDrive bytes request-local. Never expose base64,
-  raw Graph objects, native connector raw objects, sharing links, download URLs,
-  access shortcuts, or cross-drive IDs to MCP callers.
-- Enforce transport, raw-file, page/cell and output limits. Preserve OOXML expanded-byte
-  and XML guards. Delegate PDF structure parsing to the existing PDF.js library;
-  PDF internal resource bounds rely on the documented platform CPU/memory limits,
-  not a handwritten grammar whitelist or a claimed decoded-byte cap. Keep these
-  limitations explicit. Parser exceptions must not reveal document data.
-- Outlook uses only fixed Graph endpoints and fixed query construction. OneDrive
-  uses only native OneDrive for Business connector operation IDs; never use the
-  Outlook HTTP connector for OneDrive.
-- Use synthetic fixtures only. Live flow runs, deployment, OneDrive binding, and
-  merging require separate authorization. See `docs/attachments.md` and
-  `power-automate/microsoft-bypass-flow/README.md`.
+- Evolve `power-automate/microsoft-bypass-flow/definition.json` as the single flow
+  source. Keep the sanitized pre-attachment fixture in `scripts/fixtures/` unchanged;
+  regenerate the canonical definition with `python3 scripts/build_attachment_flow.py`.
+  Preserve the existing mail branches, trigger/auth, and connector contract. Never
+  commit raw exports or introduce a parallel replacement flow.
+- Keep attachment bytes request-local. Never expose base64 or raw Graph objects to MCP.
+- Enforce transport, raw-file, expanded-byte, XML, page/cell and output limits before
+  trusting parser results. Reject unsupported PDF/OOXML constructs rather than
+  silently removing the guards. Parser exceptions must not reveal document data.
+- Only fixed attachment list/get Graph routes; never follow reference URLs or nextLink.
+- Use synthetic fixtures only. Live flow runs, deployment and merging require
+  separate authorization. See `docs/attachments.md`.

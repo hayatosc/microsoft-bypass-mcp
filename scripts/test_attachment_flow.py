@@ -7,7 +7,6 @@ runtime or package importer. Static checks independently pin every network path.
 
 import base64
 from copy import deepcopy
-from datetime import datetime, timezone
 import hashlib
 import itertools
 import json
@@ -16,9 +15,7 @@ import re
 import unittest
 from urllib.parse import quote
 
-from build_attachment_flow import ATTACHMENT_OPERATIONS, BASELINE, BASE64_CHUNK, DESTINATION, FORBIDDEN_ID_CODEPOINTS, GRAPH_ROOT, ID_SCHEMA, MAIL_OPERATIONS, MAX_BASE64, MAX_BYTES, build_definition
-
-from build_read_tools_flow import ARGUMENTS, REQUIRED_ARGS
+from build_attachment_flow import ARGUMENTS, ATTACHMENT_OPERATIONS, BASELINE, BASE64_CHUNK, DESTINATION, FORBIDDEN_ID_CODEPOINTS, GRAPH_ROOT, ID_SCHEMA, MAIL_OPERATIONS, MAX_BASE64, MAX_BYTES, build_definition
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = json.loads(DESTINATION.read_text(encoding="utf-8"))
@@ -58,12 +55,8 @@ def validate(value, schema):
         "string": isinstance(value, str), "integer": type(value) is int,
         "boolean": type(value) is bool,
     }
-    matches["null"] = value is None
-    kinds = kind if isinstance(kind, list) else [kind] if kind else []
-    if kinds and not any(matches[candidate] for candidate in kinds):
+    if kind and not matches[kind]:
         raise ValueError("invalid type")
-    if isinstance(kind, list):
-        kind = next(candidate for candidate in kinds if matches[candidate])
     if "enum" in schema and value not in schema["enum"]:
         raise ValueError("invalid enum")
     if kind == "object":
@@ -138,8 +131,6 @@ class Expressions:
             args = []
             if self.tokens[self.position] != ")":
                 while True:
-                    # Conservatively evaluate all arguments, so validation must
-                    # not depend on a null-sensitive branch being short-circuited.
                     args.append(self.parse())
                     if self.tokens[self.position] != ",":
                         break
@@ -156,37 +147,15 @@ class Expressions:
         return result
 
     def call(self, name, args):
-        def wdl_string(value):
-            if value is None:
-                return ""
-            if isinstance(value, (dict, list, bool)):
-                return json.dumps(value, separators=(",", ":"))
-            return str(value)
-
-        def take(value, count):
-            if not isinstance(value, (str, list)) or type(count) is not int:
-                raise ValueError("invalid take operands")
-            return value[:max(count, 0)]
-
-        def ticks(value):
-            # This interpreter supports only the UTC ISO values admitted by
-            # these cases, retaining the seventh fractional tick digit.
-            match = re.fullmatch(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,7}))?Z", value)
-            if not match:
-                raise ValueError("invalid timestamp")
-            parsed = datetime.fromisoformat(match[1]).replace(tzinfo=timezone.utc)
-            span = parsed - datetime(1, 1, 1, tzinfo=timezone.utc)
-            return (span.days * 86400 + span.seconds) * 10_000_000 + int((match[2] or "").ljust(7, "0"))
         fns = {
             "body": lambda name: self.engine.bodies[name],
-            "outputs": lambda name: self.engine.bodies[name],
             "triggerBody": lambda: self.engine.request,
             "triggerOutputs": lambda: {"headers": self.engine.headers},
             "parameters": lambda name: self.engine.parameters[name],
             "item": lambda: self.item,
-            "concat": lambda *values: "".join(map(wdl_string, values)),
+            "concat": lambda *values: "".join(map(str, values)),
             "json": json.loads, "addProperty": lambda value, key, child: dict(value, **{key: child}),
-            "string": wdl_string, "uriComponent": lambda value: quote(value, safe="~()*!.'-_"),
+            "string": str, "uriComponent": lambda value: quote(value, safe="~()*!.'-_"),
             "coalesce": lambda *values: next((value for value in values if value is not None), None),
             "equals": lambda a, b: a == b, "not": lambda value: not value,
             "and": lambda *values: all(values), "empty": lambda value: value is None or value == "" or value == [] or value == {},
@@ -198,11 +167,6 @@ class Expressions:
             "length": lambda value: string_length(value) if isinstance(value, str) else len(value), "div": lambda a, b: a // b, "mul": lambda a, b: a * b,
             "sub": lambda a, b: a - b, "mod": lambda a, b: a % b, "if": lambda cond, yes, no: yes if cond else no,
             "endsWith": lambda value, suffix: value.endswith(suffix),
-            "trim": lambda value: value.strip(), "take": take,
-            "greater": lambda a, b: a > b, "greaterOrEquals": lambda a, b: a >= b,
-            "less": lambda a, b: a < b, "lessOrEquals": lambda a, b: a <= b,
-            "ticks": ticks, "first": lambda value: value[0],
-            "split": lambda value, separator: value.split(separator),
         }
         if name not in fns:
             raise AssertionError("Unknown WDL function")
@@ -214,13 +178,11 @@ class Flow:
         self.definition = deepcopy(definition or SOURCE)
         self.request = {"operation": operation, "requestId": REQUEST_ID, "args": args}
         self.headers = {"X-MCP-Gateway-Key": "synthetic-test-only-key"}
-        self.parameters = {name: deepcopy(value.get("defaultValue")) for name, value in self.definition["parameters"].items()}
-        self.parameters["McpGatewayKey"] = "synthetic-test-only-key"
+        self.parameters = {"McpGatewayKey": "synthetic-test-only-key"}
         self.queue = list(graph_responses)
         self.bodies = {}
         self.status = {}
         self.calls = []
-        self.call_operations = []
         self.responses = []
 
     def condition(self, expression):
@@ -267,7 +229,6 @@ class Flow:
         elif kind == "OpenApiConnection":
             inputs = resolve(action["inputs"]["parameters"])
             self.calls.append(inputs)
-            self.call_operations.append(action["inputs"]["host"]["operationId"])
             if not self.queue:
                 raise AssertionError("Unexpected Graph fetch")
             result = self.queue.pop(0)
@@ -276,8 +237,6 @@ class Flow:
             self.bodies[name] = result
         elif kind == "Select":
             self.bodies[name] = [Expressions(self, item).resolve(action["inputs"]["select"]) for item in resolve(action["inputs"]["from"])]
-        elif kind == "Compose":
-            self.bodies[name] = resolve(action["inputs"])
         elif kind == "Response":
             self.responses.append(resolve(action["inputs"]))
         elif kind == "If":
@@ -369,59 +328,41 @@ class StaticContracts(unittest.TestCase):
         start = ts.index("export interface PowerAutomateOperations")
         end = ts.index("\n}", start)
         entries = re.findall(r"\b(\w+):\s*\{\s*args:\s*\{([^}]+)\}", ts[start:end])
-        actual, required = {}, {}
-        for name, fields in entries:
-            parsed = re.findall(r"(\w+)(\?)?:\s*([^;\n]+)", fields)
-            actual[name] = {key: ("string" if value.strip().startswith("'") else "object" if value.strip() == "MailListFilters" else value.strip()) for key, optional, value in parsed}
-            required[name] = {key for key, optional, value in parsed if not optional}
+        actual = {name: dict(re.findall(r"(\w+):\s*(number|string)", fields)) for name, fields in entries}
         expected = {name: {key: "number" if schema["type"] == "integer" else schema["type"] for key, schema in fields.items()} for name, fields in ARGUMENTS.items()}
         self.assertEqual(actual, expected)
-        self.assertEqual(required, {name: set(keys) for name, keys in REQUIRED_ARGS.items()})
         trigger = SOURCE["triggers"]["manual"]["inputs"]["schema"]
         self.assertEqual(set(trigger["properties"]["operation"]["enum"]), set(expected))
         cases = SOURCE["actions"]["スイッチ"]["cases"]
         self.assertEqual(set(cases), set(expected))
-        for name in expected:
+        for name in ATTACHMENT_OPERATIONS:
             schema = cases[name]["actions"][f"Validate_{name}_args"]["inputs"]["schema"]
-            self.assertEqual(schema["properties"], ARGUMENTS[name])
-            self.assertEqual(set(schema["required"]), required[name])
+            self.assertEqual(set(schema["required"]), set(expected[name]))
             self.assertFalse(schema["additionalProperties"])
             envelope = cases[name]["actions"][f"Validate_{name}_request"]["inputs"]["schema"]
             self.assertEqual(envelope["properties"]["operation"]["enum"], [name])
             self.assertFalse(envelope["additionalProperties"])
 
-    def test_expansion_preserves_original_attachments_and_all_authentication(self):
-        # Mail branches are intentionally v2. Attachment cases stay byte-for-
-        # byte equivalent to their original canonical, sorted JSON contracts.
-        hashes = {
-            "list_attachments": "b47f9ee3526ff045892ede06bd3bc7941a24a1d0d621421b6c46f88156f2f6bc",
-            "get_attachment": "ae381560356c8335ebf89337619edd15953020108d157473f2cbdf319a279894",
-        }
-        for name, expected in hashes.items():
-            canonical = json.dumps(ATTACHMENT_CASES[name], sort_keys=True, separators=(",", ":")).encode()
-            self.assertEqual(hashlib.sha256(canonical).hexdigest(), expected)
-        original_trigger, expanded_trigger = deepcopy(BASELINE_SOURCE["triggers"]), deepcopy(SOURCE["triggers"])
-        # Explicit v2 privacy addition. Every other trigger setting, including
-        # the gateway-key condition and authentication, remains identical.
-        self.assertEqual(expanded_trigger["manual"].pop("runtimeConfiguration"), {"secureData": {"properties": ["outputs"]}})
-        del original_trigger["manual"]["inputs"]["schema"]
-        del expanded_trigger["manual"]["inputs"]["schema"]
-        self.assertEqual(expanded_trigger, original_trigger)
-        for name, original in BASELINE_SOURCE["parameters"].items():
-            self.assertEqual(SOURCE["parameters"][name], original)
+    def test_only_two_cases_and_operation_enum_are_added_to_existing_flow(self):
+        reverted = deepcopy(SOURCE)
+        for name in ATTACHMENT_OPERATIONS:
+            del reverted["actions"]["スイッチ"]["cases"][name]
+            reverted["triggers"]["manual"]["inputs"]["schema"]["properties"]["operation"]["enum"].remove(name)
+        self.assertEqual(reverted, BASELINE_SOURCE)
         self.assertEqual(set(SOURCE["actions"]), {"スイッチ"})
-        self.assertEqual(SOURCE["actions"]["スイッチ"]["default"], BASELINE_SOURCE["actions"]["スイッチ"]["default"])
+        for name in MAIL_OPERATIONS:
+            self.assertEqual(SOURCE["actions"]["スイッチ"]["cases"][name], BASELINE_SOURCE["actions"]["スイッチ"]["cases"][name])
 
-    def test_trigger_schema_defers_v2_operation_bounds_to_case_validators(self):
+    def test_trigger_schema_accepts_attachment_envelopes_without_tightening_mail(self):
         schema = SOURCE["triggers"]["manual"]["inputs"]["schema"]
         for op, args in [("list_messages", {}), ("search_messages", {"query": "synthetic"}), ("get_message", {}), ("list_attachments", {"messageId": "id", "top": 1, "skip": 0}), ("get_attachment", {"messageId": "id", "attachmentId": "id"})]:
             validate({"operation": op, "requestId": "legacy-non-uuid", "args": args}, schema)
-        for request in [None, [], {}, {"operation": "write_message", "requestId": REQUEST_ID, "args": {}}]:
+        for request in [None, [], {}, {"operation": "write_message", "requestId": REQUEST_ID, "args": {}}, {"operation": "list_messages", "requestId": REQUEST_ID, "args": {"top": 51}}]:
             with self.assertRaises(ValueError):
                 validate(request, schema)
 
     def test_action_names_are_unique_and_flow_source_is_not_duplicated(self):
-        names = [name for node in walk(SOURCE["actions"]) if isinstance(node, dict) for name, value in node.items() if isinstance(value, dict) and isinstance(value.get("type"), str) and value["type"] in {"ParseJson", "Response", "OpenApiConnection", "Select", "Compose", "If", "Switch"}]
+        names = [name for node in walk(SOURCE["actions"]) if isinstance(node, dict) for name, value in node.items() if isinstance(value, dict) and value.get("type") in {"ParseJson", "Response", "OpenApiConnection", "Select", "If", "Switch"}]
         self.assertEqual(len(names), len(set(names)))
         self.assertEqual(list((ROOT / "power-automate").glob("*/definition.json")), [DESTINATION])
 
@@ -435,12 +376,15 @@ class StaticContracts(unittest.TestCase):
 
     def test_exact_uri_expressions_are_pinned(self):
         expected = {
+            "HTTP_要求を送信します": "@concat('https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?$select=id,subject,from,receivedDateTime,isRead,importance,hasAttachments,bodyPreview&$orderby=receivedDateTime%20desc&$top=',string(coalesce(triggerBody()?['args']?['top'],20)))",
+            "HTTP_要求を送信します_2": "@concat('https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?$search=',uriComponent(concat('\"',triggerBody()?['args']?['query'],'\"')),'&$select=id,subject,from,receivedDateTime,isRead,importance,hasAttachments,bodyPreview&$top=',string(coalesce(triggerBody()?['args']?['top'],20)))",
+            "HTTP_要求を送信します_1": "@concat('https://graph.microsoft.com/v1.0/me/messages/',uriComponent(triggerBody()?['args']?['messageId']),'?$select=id,subject,from,toRecipients,ccRecipients,receivedDateTime,isRead,importance,hasAttachments,body')",
             "Graph_list_attachments": "@concat('https://graph.microsoft.com/v1.0/me/messages/',uriComponent(body('Validate_list_attachments_args')?['messageId']),'/attachments?$select=id,name,contentType,size,isInline&$top=',string(body('Validate_list_attachments_args')?['top']),'&$skip=',string(body('Validate_list_attachments_args')?['skip']))",
             "Graph_attachment_metadata": "@concat('https://graph.microsoft.com/v1.0/me/messages/',uriComponent(body('Validate_get_attachment_args')?['messageId']),'/attachments/',uriComponent(body('Validate_get_attachment_args')?['attachmentId']),'?$select=id,name,contentType,size,isInline')",
             "Graph_attachment_content": "@concat('https://graph.microsoft.com/v1.0/me/messages/',uriComponent(body('Validate_get_attachment_args')?['messageId']),'/attachments/',uriComponent(body('Validate_get_attachment_args')?['attachmentId']))",
         }
         actual = {}
-        for node in walk(ATTACHMENT_CASES):
+        for node in walk(SOURCE):
             if isinstance(node, dict):
                 for name, value in node.items():
                     if isinstance(value, dict) and value.get("type") == "OpenApiConnection":
@@ -448,11 +392,11 @@ class StaticContracts(unittest.TestCase):
         self.assertEqual(actual, expected)
 
     def test_exact_fixed_get_network_allowlist(self):
-        network = [node for node in actions_in(SOURCE) if node["type"] == "OpenApiConnection" and node["inputs"]["host"]["operationId"] == "HttpRequest"]
-        self.assertEqual(len(network), 8)
+        network = [node for node in actions_in(SOURCE) if node["type"] == "OpenApiConnection"]
+        self.assertEqual(len(network), 6)
         expected = [
-            "", "", "messages/", "messages/", "messages/", "messages/",
-            "mailFolders?$top=", "messages?$top=",
+            "mailFolders/inbox/messages?$select=id,subject,from,receivedDateTime,isRead,importance,hasAttachments,bodyPreview&$orderby=receivedDateTime%20desc&$top=",
+            "mailFolders/inbox/messages?$search=", "messages/", "messages/", "messages/", "messages/",
         ]
         prefixes = []
         for action in network:
@@ -473,18 +417,14 @@ class StaticContracts(unittest.TestCase):
                 if field in uri:
                     self.assertRegex(uri, rf"uriComponent\((?:body\('[^']+'\)|triggerBody\(\)\?\['args'\])\?\['{field}'\]\)")
         self.assertCountEqual(prefixes, expected)
-        allowed_types = {"Request", "ParseJson", "Response", "OpenApiConnection", "Select", "Compose", "If", "Switch"}
+        allowed_types = {"Request", "ParseJson", "Response", "OpenApiConnection", "Select", "If", "Switch"}
         self.assertTrue(all(node["type"] in allowed_types for node in actions_in(SOURCE)))
 
     def test_no_private_resource_metadata_or_urls(self):
         allowed_urls = {SOURCE["$schema"], GRAPH_ROOT}
         for node in walk(SOURCE):
             if isinstance(node, dict):
-                self.assertTrue(set(node).isdisjoint({"connectionReferences", "trackedProperties", "tenantId", "subscriptionId", "callbackUrl", "connectionId"}))
-                if "metadata" in node:
-                    # This is the new document payload, never flow resource metadata.
-                    self.assertEqual(set(node), {"metadata", "contentBytes"})
-                    self.assertEqual(set(node["metadata"]), {"Id", "Name", "Size", "MediaType", "IsFolder", "LastModified", "ETag"})
+                self.assertTrue(set(node).isdisjoint({"metadata", "connectionReferences", "trackedProperties", "tenantId", "subscriptionId", "callbackUrl", "connectionId"}))
             if isinstance(node, str):
                 self.assertNotRegex(node, r"(?i)(?:[?&]sig=|Bearer |SharedAccessSignature|logic\.azure\.com|environment\.api\.powerplatform\.com)")
                 for url in re.findall(r"https?://[^\s'\"]+", node):
@@ -746,31 +686,26 @@ class ExecutionContracts(unittest.TestCase):
                 self.assertIn("messages/message%2Fid?$select=", flow.calls[0]["Uri"])
                 self.assertEqual(flow.calls[0]["CustomHeader2"], 'Prefer: outlook.body-content-type="text"')
 
-    def test_v2_mail_requires_typed_top_uuid_and_message_id_but_keeps_switch_fallback(self):
-        # The Worker already supplies bounded top and UUIDs. The expanded flow
-        # deliberately replaces loose direct-trigger legacy behavior.
+    def test_legacy_defaults_missing_id_and_unknown_operation_are_preserved(self):
         for operation, args in [("list_messages", {}), ("search_messages", {"query": "synthetic"})]:
-            flow = Flow(operation, args)
-            self.assertEqual(flow.run()["body"]["error"]["code"], "INVALID_ARGUMENTS")
-            self.assertEqual(flow.calls, [])
-            flow = Flow(operation, dict(args, top=20))
+            flow = Flow(operation, args, [{"value": []}])
             flow.request["requestId"] = "legacy-non-uuid"
-            self.assertEqual(flow.run()["body"]["error"]["code"], "INVALID_REQUEST")
-            self.assertEqual(flow.calls, [])
+            self.assertEqual(flow.run()["body"]["requestId"], "legacy-non-uuid")
+            self.assertTrue(flow.calls[0]["Uri"].endswith("$top=20"))
         for args in ({}, {"messageId": ""}):
             flow = Flow("get_message", args)
-            self.assertEqual(flow.run()["statusCode"], 400)
+            self.assertEqual(flow.run(), {"statusCode": 200, "headers": {"Content-Type": "application/json"}, "body": {"ok": False, "requestId": REQUEST_ID, "error": {"code": "MISSING_MESSAGE_ID", "message": "messageId is required."}}})
             self.assertEqual(flow.calls, [])
+        # Defensive switch fallback is unchanged even though the HTTP trigger
+        # allowlist normally rejects this request before action execution.
         flow = Flow("unsupported", {})
         self.assertEqual(flow.run()["body"]["error"]["code"], "INVALID_OPERATION")
 
-    def test_v2_mail_upstream_failures_have_explicit_sanitized_responses(self):
-        for operation, args in [("list_messages", {"top": 20}), ("search_messages", {"query": "synthetic", "top": 20}), ("get_message", {"messageId": "id"})]:
-            for error in (ValueError("private synthetic failure"), TimeoutError("private synthetic timeout")):
+    def test_legacy_upstream_failures_still_have_no_explicit_response(self):
+        for operation, args in [("list_messages", {}), ("search_messages", {"query": "synthetic"}), ("get_message", {"messageId": "id"})]:
+            for error in (ValueError("synthetic failure"), TimeoutError("synthetic timeout")):
                 flow = Flow(operation, args, [error])
-                response = flow.run()
-                self.assertEqual(response["statusCode"], 502)
-                self.assertEqual(response["body"], {"ok": False, "error": {"code": "UPSTREAM_ERROR", "message": "The upstream read could not be completed."}})
+                self.assertIsNone(flow.run(allow_no_response=True))
                 self.assertEqual(len(flow.calls), 1)
 
 

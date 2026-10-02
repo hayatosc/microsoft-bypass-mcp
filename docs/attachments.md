@@ -44,10 +44,9 @@ Use actual DOCX section IDs returned by inspection, rather than assuming a namin
 scheme. Without `sectionId`, DOCX offset is relative to the whole extracted body.
 
 - PDF page numbers are 1-based, inclusive. Text comes from the existing text layer
-  through PDF.js and may not preserve visual reading order, tables, columns or all
-  glyphs. Pages can have empty text, especially scans. `truncated` means the
-  requested character budget was reached; request fewer pages or a larger permitted
-  budget.
+  and may not preserve visual reading order, tables, columns or all glyphs. Pages
+  can have empty text, especially scans. `truncated` means the requested character
+  budget was reached; request fewer pages or a larger permitted budget.
 - DOCX paragraph numbers are 1-based; text offsets are 0-based, end-exclusive
   UTF-16 code units in extracted main-body text. Heading-defined sections and
   global source offsets provide provenance. `nextOffset` allows continuation.
@@ -87,46 +86,35 @@ CRC, local/central directory agreement, names and supported flags are validated.
 ZIP64, encrypted archives, traversal, duplicates, XML DTD/entity declarations and
 external worksheet targets are rejected. Inputs are request-local and parser
 exceptions are replaced with fixed, sanitized tool errors. PDF failures additionally
-include an allowlisted [diagnostic code](pdf-diagnostics.md) for the first active
-raw-size guard or PDF.js parser stage, without original exception text or document
-values. Diagnostics do not identify every issue in a file. Removing the local
-structure whitelist allows constructs supported by PDF.js. Transport logs contain
+include an allowlisted [diagnostic code](pdf-diagnostics.md) for the first failing
+guard or parser stage, without original exception text or document values. This
+does not broaden supported PDF constructs or identify all issues in a file. Transport logs contain
 only operation, request ID, timing, status and success.
 
-PDF handling now uses the existing `unpdf` serverless PDF.js dependency instead of
-a handwritten PDF structure validator. The Worker still rejects empty PDFs and raw
-PDF bytes over 4 MiB before parser initialization, caps documents at 200 pages,
-extracts at most 10 selected pages, returns at most 20,000 UTF-16 characters, uses
-request-local bytes, disables external fetch/range/streaming/worker fetch/XFA/WASM,
-disables image rendering paths, observes a best-effort 10 second timeout, and
-always attempts to destroy the PDF.js loading task. Object streams, xref streams,
-JPEG image streams, normal forms and other PDF structures are left to PDF.js rather
-than individually whitelisted or rejected by local grammar checks.
+PDF support is intentionally conservative: PDF 1.0–1.7 classic cross-reference tables with
+direct stream lengths, and unfiltered or Flate streams. Encrypted PDFs, object/xref
+streams, indirect stream lengths or filters, other stream codecs, DecodeParms, incremental revisions, inline images, Form
+XObjects and Type3 fonts are rejected before PDF.js. This means many otherwise-valid PDFs need conversion
+outside this service; it does not promise universal PDF extraction. These guards
+bound actual stream expansion before invoking the parser, rather than trusting the
+compressed attachment size. CMap/CID indexes are restricted to 16 bits, with
+65,536 aggregate mappings and width expansions; repeated page-content references
+are independently bounded at 16 MiB and 10,000 references. No OCR or rendered image
+extraction is provided.
 
-This does not mean every valid PDF is supported. Encrypted/password-protected,
-malformed, unsupported or resource-heavy documents can still fail in PDF.js and are
-reported only through sanitized diagnostics. PDF.js runs in the same serverless
-JavaScript isolate and on the same event loop as the Worker. `setTimeout` and
-`Promise.race` observe cooperative/asynchronous delays only; they cannot preempt
-synchronous parser work, and they do not restore the former handwritten 16 MiB
-decoded-stream bound. Raw/page/output caps do not bound PDF.js internal allocation
-before or during parsing. Resource safety therefore also relies on Cloudflare
-platform CPU and memory ceilings; the documented 128 MB memory limit is per-isolate
-and can be shared across concurrent requests. This repository does not set
-`limits.cpu_ms` in `wrangler.jsonc`, the account plan is not known here, and no
-paid-only Worker limit or production CPU-kill behavior is claimed by this patch.
-Cloudflare plan/quota verification and representative CPU/memory checks with
-synthetic and expected real-world attachments are rollout gates before separately
-authorized production use.
+The PDF parser also has a best-effort wall-time limit and cleanup. Synchronous JS
+cannot be forcibly interrupted by a timer, so platform CPU/memory limits remain a
+last backstop; these tests do not establish production throughput or worst-case
+latency. Keep Cloudflare plan/CPU limits appropriate and load-test synthetic files
+before an authorized production rollout. No Worker settings are changed here.
 
 ## Flow setup and verification
 
 Use the [canonical existing-flow definition and in-place update procedure](../power-automate/microsoft-bypass-flow/README.md).
-The same HTTP trigger and operation switch retain the two attachment branches
-byte-for-byte while the [read-tool expansion](read-tools.md) evolves the mail
-branches and adds native OneDrive reads. Attachment metadata-only projection,
-file type/size preflight, encoded path segments and sanitized errors remain intact.
-There is no parallel replacement flow. The JSON is reviewable source, not an importable ZIP or
+The same HTTP trigger and operation switch retain the existing three mail branches
+and add two attachment branches, with metadata-only list projection, file type/size
+preflight, encoded path segments and sanitized attachment errors. There is no
+parallel replacement flow. The JSON is reviewable source, not an importable ZIP or
 Dataverse solution. Preserve the existing private connection and gateway setup;
 the public blank SecureString parameter deliberately fails closed. Verify the
 callback URL privately after an authorized save rather than assuming continuity.
@@ -134,9 +122,9 @@ callback URL privately after an authorized save rather than assuming continuity.
 Offline checks use synthetic PDF/DOCX/XLSX documents, malformed files and size-limit
 attacks. `bun run test` uses the official Cloudflare Workers Vitest integration
 (`@cloudflare/vitest-plugin`) for Hono `app.request`, MCP tool calls, and file
-parsers with mocked flow responses. They do not contact Graph, invoke a live flow,
-persist mail, or deploy anything. Power Automate tests check the source contract,
-including exact legacy-mail compatibility, without executing Microsoft's service.
+parsers with mocked flow responses. They do not contact Graph, invoke a live flow, persist
+mail, or deploy anything. Power Automate tests check the source contract, including
+exact legacy-mail compatibility, without executing Microsoft's service.
 
 ```sh
 bun install --frozen-lockfile

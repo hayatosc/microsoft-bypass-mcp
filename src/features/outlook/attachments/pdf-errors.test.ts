@@ -10,13 +10,23 @@ vi.mock('unpdf', async (importOriginal) => {
 
 import { PowerAutomateClient } from '../../../lib/power-automate.js'
 import { createOutlookMcpServer } from '../server.js'
-import { makeEncryptedPdf, makePdf } from './fixtures-pdf.js'
+import { makePdf } from './fixtures-pdf.js'
 import { getPdfDiagnosticCode, PDF_DIAGNOSTICS, PdfParseError } from './pdf-errors.js'
 import { inspectPdf, readPdf } from './pdf.js'
 import { syntheticAttachment } from './synthetic-fixtures.js'
 
 const secret = 'SYNTHETIC_PRIVATE_ERROR https://private.invalid/file.pdf'
 const encoder = new TextEncoder()
+const indirectLength = () =>
+  encoder.encode(new TextDecoder().decode(makePdf()).replace(/\/Length \d+/u, '/Length 3 0 R'))
+
+function invalidFlate(): Uint8Array {
+  const bytes = makePdf({ pages: 1, compressed: true })
+  const marker = new TextDecoder().decode(bytes).indexOf('stream\n') + 7
+  bytes[marker] = 0
+  bytes[marker + 1] = 0
+  return bytes
+}
 
 async function failure(run: () => Promise<unknown>) {
   try {
@@ -35,23 +45,57 @@ afterEach(() => {
 
 describe('closed PDF diagnostics', () => {
   it.each([
-    ['PDF_RAW_SIZE', () => new Uint8Array()],
-    ['PDF_RAW_SIZE', () => new Uint8Array(4 * 1024 * 1024 + 1)],
-  ] as const)('%s identifies pre-parser raw input limits', async (code, bytes) => {
+    ['PDF_FORM_XOBJECT', () => makePdf({ streamDictionary: '/Subtype /Form' })],
+    ['PDF_OBJECT_STREAM', () => makePdf({ streamDictionary: '/Type /ObjStm' })],
+    ['PDF_XREF_STREAM', () => makePdf({ streamDictionary: '/Type /XRef' })],
+    ['PDF_ENCRYPTED', () => makePdf({ trailer: '/Encrypt 3 0 R' })],
+    ['PDF_INCREMENTAL', () => makePdf({ trailer: '/Prev 0' })],
+    ['PDF_TYPE3_FONT', () => makePdf({ streamDictionary: '/Subtype /Type3' })],
+    ['PDF_ACTIVE_CONTENT', () => makePdf({ trailer: '/JavaScript (private)' })],
+    [
+      'PDF_DECODE_PARAMETERS',
+      () => makePdf({ streamDictionary: '/DecodeParms << /Predictor 12 >>' }),
+    ],
+    ['PDF_FILTER_DCT', () => makePdf({ streamDictionary: '/Filter /DCTDecode' })],
+    ['PDF_FILTER_DCT', () => makePdf({ streamDictionary: '/Filter [/DCTDecode]' })],
+    ['PDF_FILTER_JPX', () => makePdf({ streamDictionary: '/Filter /JPXDecode' })],
+    ['PDF_FILTER_JBIG2', () => makePdf({ streamDictionary: '/Filter /JBIG2Decode' })],
+    ['PDF_FILTER_CCITT', () => makePdf({ streamDictionary: '/Filter /CCITTFaxDecode' })],
+    ['PDF_FILTER_LZW', () => makePdf({ streamDictionary: '/Filter /LZWDecode' })],
+    ['PDF_FILTER_ASCII85', () => makePdf({ streamDictionary: '/Filter /ASCII85Decode' })],
+    ['PDF_FILTER_ASCIIHEX', () => makePdf({ streamDictionary: '/Filter /ASCIIHexDecode' })],
+    ['PDF_FILTER_RUNLENGTH', () => makePdf({ streamDictionary: '/Filter /RunLengthDecode' })],
+    ['PDF_FILTER_CRYPT', () => makePdf({ streamDictionary: '/Filter /Crypt' })],
+    ['PDF_FILTER_FLATE_ALIAS', () => makePdf({ streamDictionary: '/Filter /Fl' })],
+    ['PDF_FILTER_INDIRECT', () => makePdf({ streamDictionary: '/Filter 3 0 R' })],
+    [
+      'PDF_FILTER_CHAIN',
+      () => makePdf({ streamDictionary: '/Filter [/ASCII85Decode /DCTDecode]' }),
+    ],
+    ['PDF_FILTER_CHAIN', () => makePdf({ streamDictionary: '/Filter []' })],
+    ['PDF_STREAM_FILTER', () => makePdf({ streamDictionary: '/Filter /SYNTHETIC_PRIVATE_FILTER' })],
+    ['PDF_INDIRECT_LENGTH', indirectLength],
+    ['PDF_DECOMPRESSION', invalidFlate],
+    ['PDF_HEADER', () => encoder.encode('%PDF-2.0\n%%EOF\n')],
+    ['PDF_EOF', () => encoder.encode('%PDF-1.7\nmissing')],
+    ['PDF_EXTERNAL_STREAM', () => makePdf({ streamDictionary: '/F (https://private.invalid/)' })],
+    ['PDF_INLINE_IMAGE', () => makePdf({ content: 'q BI /W 1 /H 1 ID x EI Q' })],
+  ] as const)('%s identifies the first guard before PDF.js', async (code, bytes) => {
     vi.mocked(getResolvedPDFJS).mockClear()
     const error = await failure(() => inspectPdf(bytes()))
     expect(error).toBeInstanceOf(PdfParseError)
     expect(getPdfDiagnosticCode(error)).toBe(code)
+    expect(String(error)).not.toContain('SYNTHETIC_PRIVATE_FILTER')
     expect(getResolvedPDFJS).not.toHaveBeenCalled()
   })
 
   it('does not trust mutated error properties, forged codes, or the code map prototype', () => {
-    const error = new PdfParseError('PDF_LOAD')
+    const error = new PdfParseError('PDF_FORM_XOBJECT')
     error.message = secret
     Object.defineProperty(error, 'code', { value: secret })
-    expect(getPdfDiagnosticCode(error)).toBe('PDF_LOAD')
+    expect(getPdfDiagnosticCode(error)).toBe('PDF_FORM_XOBJECT')
     expect(
-      getPdfDiagnosticCode(Object.assign(new Error(secret), { code: 'PDF_LOAD' })),
+      getPdfDiagnosticCode(Object.assign(new Error(secret), { code: 'PDF_FORM_XOBJECT' })),
     ).toBeUndefined()
     const invalid = Reflect.construct(PdfParseError, [secret])
     expect(getPdfDiagnosticCode(invalid)).toBe('PDF_UNKNOWN')
@@ -67,27 +111,6 @@ describe('closed PDF diagnostics', () => {
     expect(String(error)).not.toContain(secret)
   })
 
-  it('sanitizes exceptions whose name accessor itself throws', async () => {
-    const hostile = new Error(secret)
-    Object.defineProperty(hostile, 'name', {
-      get() {
-        throw new Error(secret)
-      },
-    })
-    vi.mocked(getResolvedPDFJS).mockRejectedValueOnce(hostile)
-    const error = await failure(() => inspectPdf(makePdf()))
-    expect(getPdfDiagnosticCode(error)).toBe('PDF_INITIALIZATION')
-    expect(String(error)).not.toContain(secret)
-  })
-
-  it('rejects a genuine password-protected synthetic PDF through inspect and read', async () => {
-    for (const parse of [inspectPdf, readPdf]) {
-      const error = await failure(() => parse(makeEncryptedPdf()))
-      expect(getPdfDiagnosticCode(error)).toBe('PDF_PASSWORD')
-      expect(String(error)).not.toContain('synthetic-fixture-password')
-    }
-  })
-
   it('labels loading task creation failures without exposing their text', async () => {
     const pdfjs = await getResolvedPDFJS()
     vi.mocked(getResolvedPDFJS).mockResolvedValueOnce({
@@ -101,7 +124,7 @@ describe('closed PDF diagnostics', () => {
     expect(String(error)).not.toContain(secret)
   })
 
-  it.each(['load', 'extraction'] as const)(
+  it.each(['load', 'operation'] as const)(
     'labels %s failure and destroys the loading task',
     async (stage) => {
       const pdfjs = await getResolvedPDFJS()
@@ -125,50 +148,11 @@ describe('closed PDF diagnostics', () => {
         },
       })
       const error = await failure(() => readPdf(makePdf()))
-      expect(getPdfDiagnosticCode(error)).toBe(stage === 'load' ? 'PDF_LOAD' : 'PDF_EXTRACTION')
+      expect(getPdfDiagnosticCode(error)).toBe(stage === 'load' ? 'PDF_LOAD' : 'PDF_OPERATION')
       expect(String(error)).not.toContain(secret)
       expect(destroyed).toBe(true)
     },
   )
-
-  it('labels invalid text chunks without exposing their contents', async () => {
-    const pdfjs = await getResolvedPDFJS()
-    let destroyed = false
-    vi.mocked(getResolvedPDFJS).mockResolvedValueOnce({
-      ...pdfjs,
-      getDocument: (parameters) => {
-        const task = pdfjs.getDocument(parameters)
-        const promise = task.promise.then((document) => {
-          const getPage = document.getPage.bind(document)
-          vi.spyOn(document, 'getPage').mockImplementation(async (number) => {
-            const page = await getPage(number)
-            Object.defineProperty(page, 'streamTextContent', {
-              value: () =>
-                new ReadableStream({
-                  start(controller) {
-                    controller.enqueue({ private: secret })
-                    controller.close()
-                  },
-                }),
-            })
-            return page
-          })
-          return document
-        })
-        Object.defineProperty(task, 'promise', { value: promise })
-        const destroy = task.destroy.bind(task)
-        vi.spyOn(task, 'destroy').mockImplementation(async () => {
-          destroyed = true
-          await destroy()
-        })
-        return task
-      },
-    })
-    const error = await failure(() => readPdf(makePdf()))
-    expect(getPdfDiagnosticCode(error)).toBe('PDF_TEXT_CHUNK')
-    expect(String(error)).not.toContain(secret)
-    expect(destroyed).toBe(true)
-  })
 
   it('labels timeouts and preserves cleanup without changing the deadline', async () => {
     const pdfjs = await getResolvedPDFJS()
@@ -192,18 +176,6 @@ describe('closed PDF diagnostics', () => {
     expect(getPdfDiagnosticCode(await pending)).toBe('PDF_TIMEOUT')
     expect(destroyed).toBe(true)
     expect(vi.getTimerCount()).toBe(0)
-  })
-
-  it('sanitizes malformed and encrypted-looking library failures', async () => {
-    for (const bytes of [
-      encoder.encode('not a PDF ' + secret),
-      makePdf({ trailer: '/Encrypt 3 0 R' }),
-    ]) {
-      const error = await failure(() => inspectPdf(bytes))
-      expect(error).toBeInstanceOf(PdfParseError)
-      expect(getPdfDiagnosticCode(error)).toBeDefined()
-      expect(String(error)).not.toContain(secret)
-    }
   })
 })
 
@@ -253,12 +225,15 @@ describe('PDF diagnostics through actual MCP boundary', () => {
   it.each(['outlook_inspect_attachment', 'outlook_read_attachment'] as const)(
     '%s returns only generic text and a fixed reason',
     async (tool) => {
-      const result = await mcpFailure(tool, encoder.encode('not a PDF ' + secret))
+      const result = await mcpFailure(
+        tool,
+        makePdf({ streamDictionary: '/Subtype /Form', text: secret }),
+      )
       expect(result.isError).toBe(true)
       expect(result.content).toEqual([
         {
           type: 'text',
-          text: 'Attachment could not be read safely: unsupported, malformed, encrypted or over parser limits [PDF_LOAD]',
+          text: 'Attachment could not be read safely: unsupported, malformed, encrypted or over parser limits [PDF_FORM_XOBJECT]',
         },
       ])
       expect(result.structuredContent).toBeUndefined()
@@ -267,12 +242,12 @@ describe('PDF diagnostics through actual MCP boundary', () => {
   )
 
   it('reconstructs typed errors instead of returning mutated messages or codes', async () => {
-    const error = new PdfParseError('PDF_LOAD')
+    const error = new PdfParseError('PDF_FORM_XOBJECT')
     error.message = secret
     Object.defineProperty(error, 'code', { value: secret })
     vi.mocked(getResolvedPDFJS).mockRejectedValueOnce(error)
     const result = await mcpFailure('outlook_inspect_attachment', makePdf())
-    expect(JSON.stringify(result)).toContain('[PDF_LOAD]')
+    expect(JSON.stringify(result)).toContain('[PDF_FORM_XOBJECT]')
     expect(JSON.stringify(result)).not.toContain(secret)
   })
 
@@ -292,13 +267,3 @@ describe('PDF diagnostics through actual MCP boundary', () => {
     for (const call of log.mock.calls) expect(JSON.stringify(call)).not.toContain(secret)
   })
 })
-
-it.each(['outlook_inspect_attachment', 'outlook_read_attachment'] as const)(
-  '%s sanitizes a genuine password-protected PDF',
-  async (tool) => {
-    const result = await mcpFailure(tool, makeEncryptedPdf())
-    expect(result.isError).toBe(true)
-    expect(JSON.stringify(result)).toContain('[PDF_PASSWORD]')
-    expect(JSON.stringify(result)).not.toContain('synthetic-fixture-password')
-  },
-)

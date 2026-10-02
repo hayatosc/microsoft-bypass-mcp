@@ -7,7 +7,7 @@ vi.mock('unpdf', async (importOriginal) => {
   return { ...actual, getResolvedPDFJS: vi.fn(actual.getResolvedPDFJS) }
 })
 
-import { makeJpegStreamPdf, makeObjectStreamPdf, makePdf } from './fixtures-pdf.js'
+import { makePdf } from './fixtures-pdf.js'
 import { inspectPdf, PdfRangeError, readPdf } from './pdf.js'
 
 const encoder = new TextEncoder()
@@ -34,17 +34,6 @@ describe('bounded PDF parsing', () => {
     expect(result.pageCount).toBe(2)
     expect(result.pages).toEqual([{ page: 2, text: 'Hello attachment page 2', truncated: false }])
     expect(result.truncated).toBe(false)
-  })
-
-  it('lets PDF.js handle object streams, xref streams and JPEG image streams', async () => {
-    expect(await inspectPdf(makeObjectStreamPdf())).toEqual({ pageCount: 1 })
-    expect((await readPdf(makeObjectStreamPdf())).pages).toEqual([
-      { page: 1, text: 'Object stream text', truncated: false },
-    ])
-    expect(await inspectPdf(makeJpegStreamPdf())).toEqual({ pageCount: 1 })
-    expect((await readPdf(makeJpegStreamPdf())).pages).toEqual([
-      { page: 1, text: 'JPEG-stream text', truncated: false },
-    ])
   })
 
   it('enforces one aggregate character budget, with explicit per-page truncation', async () => {
@@ -94,49 +83,57 @@ describe('bounded PDF parsing', () => {
     await expect(inspectPdf(makePdf({ pages: 201 }))).rejects.toThrow('safety limits')
   })
 
-  it('rejects empty and oversized raw inputs before PDF.js is initialized', async () => {
-    vi.mocked(getResolvedPDFJS).mockClear()
-    await expect(inspectPdf(new Uint8Array())).rejects.toThrow('[PDF_RAW_SIZE]')
-    await expect(inspectPdf(new Uint8Array(4 * 1024 * 1024 + 1))).rejects.toThrow('[PDF_RAW_SIZE]')
-    expect(getResolvedPDFJS).not.toHaveBeenCalled()
+  it('rejects encrypted, active, incremental and object-stream forms before parsing', async () => {
+    for (const trailer of [
+      '/Encrypt 3 0 R',
+      '/Prev 0',
+      '/XRefStm 0',
+      '/JS (secret)',
+      '/JavaScript (secret)',
+    ]) {
+      await expect(inspectPdf(makePdf({ trailer }))).rejects.toThrow('safety limits')
+    }
+    for (const streamDictionary of [
+      '/Type /ObjStm',
+      '/Type /XRef',
+      '/Filter /LZWDecode',
+      '/Filter /DCTDecode',
+      '/Filter 3 0 R',
+      '/DecodeParms << /Predictor 12 >>',
+      '/Length 3 0 R',
+      '/F (https://example.invalid/secret)',
+    ]) {
+      await expect(inspectPdf(makePdf({ streamDictionary }))).rejects.toThrow('safety limits')
+    }
   })
 
-  it('fails malformed and encrypted-looking inputs with sanitized parser diagnostics', async () => {
-    await expect(inspectPdf(encoder.encode('not a PDF secret'))).rejects.toThrow('safety limits')
-    await expect(inspectPdf(makePdf({ trailer: '/Encrypt 3 0 R' }))).rejects.toThrow(
+  it('rejects encoded-name bypasses, duplicate keys, invalid cross references and raw limits', async () => {
+    await expect(inspectPdf(makePdf({ trailer: '/Encr#79pt 3 0 R' }))).rejects.toThrow(
       'safety limits',
     )
+    await expect(inspectPdf(makePdf({ streamDictionary: '/L#65ngth 1' }))).rejects.toThrow(
+      'safety limits',
+    )
+    await expect(
+      inspectPdf(replace(makePdf(), '0000000009 00000 n', '0000000010 00000 n')),
+    ).rejects.toThrow('safety limits')
+    await expect(inspectPdf(new Uint8Array(4 * 1024 * 1024 + 1))).rejects.toThrow('safety limits')
+    await expect(inspectPdf(encoder.encode('not a PDF secret'))).rejects.toThrow('safety limits')
   })
 
-  it('does not extract pages outside the selected bounds', async () => {
-    const pdfjs = await getResolvedPDFJS()
-    const requested: number[] = []
-    let destroyed = false
-    vi.mocked(getResolvedPDFJS).mockResolvedValueOnce({
-      ...pdfjs,
-      getDocument: (parameters) => {
-        const task = pdfjs.getDocument(parameters)
-        const promise = task.promise.then((document) => {
-          const getPage = document.getPage.bind(document)
-          vi.spyOn(document, 'getPage').mockImplementation(async (number) => {
-            requested.push(number)
-            return await getPage(number)
-          })
-          return document
-        })
-        Object.defineProperty(task, 'promise', { value: promise })
-        const destroy = task.destroy.bind(task)
-        vi.spyOn(task, 'destroy').mockImplementation(async () => {
-          destroyed = true
-          await destroy()
-        })
-        return task
-      },
-    })
-    const result = await readPdf(makePdf({ pages: 3 }), { pageStart: 2, pageEnd: 2 })
-    expect(requested).toEqual([2])
-    expect(result.pages).toEqual([{ page: 2, text: 'Hello attachment page 2', truncated: false }])
-    expect(destroyed).toBe(true)
+  it('rejects compressed stream bombs by actual decoded bytes, not PDF Length', async () => {
+    const bytes = makePdf({ pages: 1, content: ' '.repeat(9 * 1024 * 1024), compressed: true })
+    expect(bytes.length).toBeLessThan(20000)
+    await expect(inspectPdf(bytes)).rejects.toThrow('safety limits')
+  })
+
+  it('rejects the aggregate stream budget and inline image codecs', async () => {
+    await expect(
+      inspectPdf(makePdf({ pages: 3, content: ' '.repeat(6 * 1024 * 1024), compressed: true })),
+    ).rejects.toThrow('safety limits')
+    await expect(
+      inspectPdf(makePdf({ content: 'q BI /W 1 /H 1 /BPC 8 /CS /G ID x EI Q' })),
+    ).rejects.toThrow('safety limits')
   })
 
   it('destroys the loading task on success, invalid selectors, and document-load failures', async () => {
@@ -176,6 +173,7 @@ describe('bounded PDF parsing', () => {
       ...pdfjs,
       getDocument: (options) => {
         const task = pdfjs.getDocument(options)
+        // Preserve a real task's lifecycle while simulating a stalled load.
         Object.defineProperty(task, 'promise', { value: new Promise(() => undefined) })
         const destroy = task.destroy.bind(task)
         vi.spyOn(task, 'destroy').mockImplementation(async () => {
@@ -191,5 +189,62 @@ describe('bounded PDF parsing', () => {
     await failure
     expect(destroyed).toBe(true)
     expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('bounds CMap expansion independently of compressed stream sizes', async () => {
+    const valid = makePdf({ content: '1 beginbfchar <0041> <0042> endbfchar', pages: 1 })
+    expect(await inspectPdf(valid)).toEqual({ pageCount: 1 })
+    const mappings = [
+      '1 beginbfrange <00000000> <00ffffff> <0000> endbfrange',
+      '2 beginbfrange <0000> <ffff> <0000> <0000> <ffff> <0000> endbfrange',
+      `1 beginbfrange <0000> <ffff> <${'0041'.repeat(32)}> endbfrange`,
+      '1 begincidrange <0000> <ffffff> 0 endcidrange',
+      '1 beginbfchar <ffff0000> <0000> endbfchar',
+    ]
+    for (const content of mappings) {
+      await expect(inspectPdf(makePdf({ pages: 1, content, compressed: true }))).rejects.toThrow(
+        'safety limits',
+      )
+    }
+  })
+
+  it('bounds repeated content references and rejects Form/Type3 amplification', async () => {
+    await expect(
+      inspectPdf(
+        makePdf({
+          pages: 1,
+          content: ' '.repeat(2 * 1024 * 1024),
+          compressed: true,
+          contentRepeats: 9,
+        }),
+      ),
+    ).rejects.toThrow('safety limits')
+    for (const streamDictionary of ['/Subtype /Form', '/Subtype /Type3', '/Type 3 0 R']) {
+      await expect(inspectPdf(makePdf({ streamDictionary }))).rejects.toThrow('safety limits')
+    }
+  })
+
+  it('bounds CID width ranges, sparse font indexes, and repeated mapping expansion before PDF.js', async () => {
+    const pdfjs = vi.mocked(getResolvedPDFJS)
+    pdfjs.mockClear()
+    for (const streamDictionary of [
+      '/W [0 1000000000 500]',
+      '/W2 [0 1000000000 1 2 3]',
+      '/W [0 65535 500 0 65535 500]',
+      '/W [65535 [500 500]]',
+      '/W2 [0 [1 2]]',
+      '/FirstChar 1000000000',
+      '/LastChar 1000000000',
+      '/Differences [1000000000 /A]',
+      '/Differences [65535 /A /B]',
+    ]) {
+      await expect(inspectPdf(makePdf({ streamDictionary }))).rejects.toThrow('safety limits')
+    }
+    expect(pdfjs).not.toHaveBeenCalled()
+    expect(
+      await inspectPdf(
+        makePdf({ streamDictionary: '/W [0 255 500] /W2 [0 [1 2 3]] /Differences [65 /A /B]' }),
+      ),
+    ).toEqual({ pageCount: 2 })
   })
 })
