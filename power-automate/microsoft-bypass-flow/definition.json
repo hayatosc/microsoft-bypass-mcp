@@ -5893,25 +5893,25 @@
                           },
                           "inputs": {
                             "content": {
-                              "$content-type": "@body('OneDrive_get_content')?['$content-type']",
-                              "$content": "@body('OneDrive_get_content')?['$content']"
+                              "contentType": "@body('OneDrive_get_content')?['$content-type']",
+                              "contentBytes": "@body('OneDrive_get_content')?['$content']"
                             },
                             "schema": {
                               "type": "object",
                               "properties": {
-                                "$content-type": {
+                                "contentType": {
                                   "type": "string",
                                   "maxLength": 256
                                 },
-                                "$content": {
+                                "contentBytes": {
                                   "type": "string",
                                   "minLength": 4,
                                   "maxLength": 5592408
                                 }
                               },
                               "required": [
-                                "$content-type",
-                                "$content"
+                                "contentType",
+                                "contentBytes"
                               ],
                               "additionalProperties": false
                             }
@@ -5963,7 +5963,7 @@
                             ]
                           },
                           "inputs": {
-                            "from": "@chunk(body('Validate_onedrive_binary')?['$content'], 8192)",
+                            "from": "@chunk(body('Validate_onedrive_binary')?['contentBytes'], 8192)",
                             "select": "@and(equals(uriComponent(item()), replace(replace(replace(item(), '+', '%2B'), '/', '%2F'), '=', '%3D')), not(contains(item(), '-')), not(contains(item(), '_')), not(contains(item(), '.')), not(contains(item(), '!')), not(contains(item(), '~')), not(contains(item(), '*')), not(contains(item(), '''')), not(contains(item(), '(')), not(contains(item(), ')')))"
                           },
                           "runtimeConfiguration": {
@@ -6071,31 +6071,31 @@
                             "and": [
                               {
                                 "lessOrEquals": [
-                                  "@sub(mul(div(length(body('Validate_onedrive_binary')?['$content']), 4), 3), if(endsWith(body('Validate_onedrive_binary')?['$content'], '=='), 2, if(endsWith(body('Validate_onedrive_binary')?['$content'], '='), 1, 0)))",
+                                  "@sub(mul(div(length(body('Validate_onedrive_binary')?['contentBytes']), 4), 3), if(endsWith(body('Validate_onedrive_binary')?['contentBytes'], '=='), 2, if(endsWith(body('Validate_onedrive_binary')?['contentBytes'], '='), 1, 0)))",
                                   4194304
                                 ]
                               },
                               {
                                 "equals": [
-                                  "@sub(mul(div(length(body('Validate_onedrive_binary')?['$content']), 4), 3), if(endsWith(body('Validate_onedrive_binary')?['$content'], '=='), 2, if(endsWith(body('Validate_onedrive_binary')?['$content'], '='), 1, 0)))",
+                                  "@sub(mul(div(length(body('Validate_onedrive_binary')?['contentBytes']), 4), 3), if(endsWith(body('Validate_onedrive_binary')?['contentBytes'], '=='), 2, if(endsWith(body('Validate_onedrive_binary')?['contentBytes'], '='), 1, 0)))",
                                   "@body('Validate_onedrive_content_metadata')?['Size']"
                                 ]
                               },
                               {
                                 "equals": [
-                                  "@or(and(endsWith(toLower(body('Validate_onedrive_content_metadata')?['Name']), '.pdf'), or(or(equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['$content-type'], ';')))), ''), equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['$content-type'], ';')))), 'application/octet-stream')), equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['$content-type'], ';')))), 'application/pdf'))), and(endsWith(toLower(body('Validate_onedrive_content_metadata')?['Name']), '.docx'), or(or(equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['$content-type'], ';')))), ''), equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['$content-type'], ';')))), 'application/octet-stream')), equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['$content-type'], ';')))), 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'))), and(endsWith(toLower(body('Validate_onedrive_content_metadata')?['Name']), '.xlsx'), or(or(equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['$content-type'], ';')))), ''), equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['$content-type'], ';')))), 'application/octet-stream')), equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['$content-type'], ';')))), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'))))",
+                                  "@or(and(endsWith(toLower(body('Validate_onedrive_content_metadata')?['Name']), '.pdf'), or(or(equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['contentType'], ';')))), ''), equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['contentType'], ';')))), 'application/octet-stream')), equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['contentType'], ';')))), 'application/pdf'))), and(endsWith(toLower(body('Validate_onedrive_content_metadata')?['Name']), '.docx'), or(or(equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['contentType'], ';')))), ''), equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['contentType'], ';')))), 'application/octet-stream')), equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['contentType'], ';')))), 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'))), and(endsWith(toLower(body('Validate_onedrive_content_metadata')?['Name']), '.xlsx'), or(or(equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['contentType'], ';')))), ''), equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['contentType'], ';')))), 'application/octet-stream')), equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['contentType'], ';')))), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'))))",
                                   true
                                 ]
                               },
                               {
                                 "equals": [
-                                  "@mod(length(body('Validate_onedrive_binary')?['$content']), 4)",
+                                  "@mod(length(body('Validate_onedrive_binary')?['contentBytes']), 4)",
                                   0
                                 ]
                               },
                               {
                                 "equals": [
-                                  "@or(equals(indexOf(body('Validate_onedrive_binary')?['$content'], '='), -1), equals(indexOf(body('Validate_onedrive_binary')?['$content'], '='), sub(length(body('Validate_onedrive_binary')?['$content']), if(endsWith(body('Validate_onedrive_binary')?['$content'], '=='), 2, 1))))",
+                                  "@or(equals(indexOf(body('Validate_onedrive_binary')?['contentBytes'], '='), -1), equals(indexOf(body('Validate_onedrive_binary')?['contentBytes'], '='), sub(length(body('Validate_onedrive_binary')?['contentBytes']), if(endsWith(body('Validate_onedrive_binary')?['contentBytes'], '=='), 2, 1))))",
                                   true
                                 ]
                               }
@@ -6126,7 +6126,7 @@
                                       "LastModified": "@body('Validate_onedrive_content_metadata')?['LastModified']",
                                       "ETag": "@body('Validate_onedrive_content_metadata')?['ETag']"
                                     },
-                                    "contentBytes": "@body('Validate_onedrive_binary')?['$content']"
+                                    "contentBytes": "@body('Validate_onedrive_binary')?['contentBytes']"
                                   }
                                 }
                               },

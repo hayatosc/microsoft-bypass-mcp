@@ -462,22 +462,23 @@ def onedrive_get_content_case() -> dict:
     content_actions: dict = {}
     content_actions["OneDrive_get_content"] = onedrive("OneDrive_get_content", "GetFileContent", {"id": f"@body('{validate}')?['fileId']", "inferContentType": True})[1]
     failure(content_actions, "OneDrive_get_content")
-    binary_schema = object_schema({"$content-type": {"type": "string", "maxLength": 256}, "$content": {"type": "string", "minLength": 4, "maxLength": MAX_BASE64}}, strict=True)
-    # Project the binary wrapper explicitly. Passing the semantic binary body
-    # itself to Parse JSON can cause content-type coercion in the platform.
+    binary_schema = object_schema({"contentType": {"type": "string", "maxLength": 256}, "contentBytes": {"type": "string", "minLength": 4, "maxLength": MAX_BASE64}}, strict=True)
+    # Use ordinary JSON keys: recreating the reserved $content-type/$content
+    # envelope can preserve semantic binary content rather than a JSON object.
+    # Copy the native base64 string directly; never encode or decode it here.
     binary_fields = {
-        "$content-type": "@body('OneDrive_get_content')?['$content-type']",
-        "$content": "@body('OneDrive_get_content')?['$content']",
+        "contentType": "@body('OneDrive_get_content')?['$content-type']",
+        "contentBytes": "@body('OneDrive_get_content')?['$content']",
     }
     content_actions["Validate_onedrive_binary"] = parse("Validate_onedrive_binary", binary_fields, binary_schema, after("OneDrive_get_content"))[1]
     failure(content_actions, "Validate_onedrive_binary", code="INVALID_ONEDRIVE_CONTENT", message="The upstream OneDrive content is invalid or exceeds the limit.")
-    content_actions["Select_onedrive_content_alphabet"] = secure({"type": "Select", "runAfter": after("Validate_onedrive_binary"), "inputs": {"from": f"@chunk(body('Validate_onedrive_binary')?['$content'], {BASE64_CHUNK})", "select": "@" + base64_alphabet_guard("item()")}})
+    content_actions["Select_onedrive_content_alphabet"] = secure({"type": "Select", "runAfter": after("Validate_onedrive_binary"), "inputs": {"from": f"@chunk(body('Validate_onedrive_binary')?['contentBytes'], {BASE64_CHUNK})", "select": "@" + base64_alphabet_guard("item()")}})
     failure(content_actions, "Select_onedrive_content_alphabet", code="INVALID_ONEDRIVE_CONTENT", message="The upstream OneDrive content is invalid or exceeds the limit.")
     content_actions["Validate_onedrive_content_alphabet"] = parse("Validate_onedrive_content_alphabet", "@body('Select_onedrive_content_alphabet')", {"type": "array", "maxItems": (MAX_BASE64 + BASE64_CHUNK - 1) // BASE64_CHUNK, "items": {"type": "boolean", "enum": [True]}}, after("Select_onedrive_content_alphabet"))[1]
     failure(content_actions, "Validate_onedrive_content_alphabet", code="INVALID_ONEDRIVE_CONTENT", message="The upstream OneDrive content is invalid or exceeds the limit.")
-    b64 = "body('Validate_onedrive_binary')?['$content']"
+    b64 = "body('Validate_onedrive_binary')?['contentBytes']"
     decoded = f"sub(mul(div(length({b64}), 4), 3), if(endsWith({b64}, '=='), 2, if(endsWith({b64}, '='), 1, 0)))"
-    content_actions["Check_onedrive_content_size"] = condition({"and": [{"lessOrEquals": ["@" + decoded, MAX_ATTACHMENT_BYTES]}, {"equals": ["@" + decoded, field("Validate_onedrive_content_metadata", "Size")]}, content_type_gate_expr("body('Validate_onedrive_binary')?['$content-type']"), {"equals": [f"@mod(length({b64}), 4)", 0]}, {"equals": [f"@or(equals(indexOf({b64}, '='), -1), equals(indexOf({b64}, '='), sub(length({b64}), if(endsWith({b64}, '=='), 2, 1))))", True]}]}, {"Respond_onedrive_content": success({"metadata": projection("Validate_onedrive_content_metadata", ONEDRIVE_RETURN_FIELDS), "contentBytes": "@body('Validate_onedrive_binary')?['$content']"})}, {"Reject_onedrive_content": error(502, "INVALID_ONEDRIVE_CONTENT", "The upstream OneDrive content is invalid or exceeds the limit.")}, after("Validate_onedrive_content_alphabet"))
+    content_actions["Check_onedrive_content_size"] = condition({"and": [{"lessOrEquals": ["@" + decoded, MAX_ATTACHMENT_BYTES]}, {"equals": ["@" + decoded, field("Validate_onedrive_content_metadata", "Size")]}, content_type_gate_expr("body('Validate_onedrive_binary')?['contentType']"), {"equals": [f"@mod(length({b64}), 4)", 0]}, {"equals": [f"@or(equals(indexOf({b64}, '='), -1), equals(indexOf({b64}, '='), sub(length({b64}), if(endsWith({b64}, '=='), 2, 1))))", True]}]}, {"Respond_onedrive_content": success({"metadata": projection("Validate_onedrive_content_metadata", ONEDRIVE_RETURN_FIELDS), "contentBytes": "@body('Validate_onedrive_binary')?['contentBytes']"})}, {"Reject_onedrive_content": error(502, "INVALID_ONEDRIVE_CONTENT", "The upstream OneDrive content is invalid or exceeds the limit.")}, after("Validate_onedrive_content_alphabet"))
     type_gate = condition(content_type_gate_expr(), content_actions, {"Reject_onedrive_content_type": error(415, "UNSUPPORTED_ONEDRIVE_FILE_TYPE", "Only PDF, DOCX, and XLSX files can be read.")})
     size_gate = condition({"and": [{"equals": [field("Validate_onedrive_content_metadata", "IsFolder"), False]}, {"lessOrEquals": [field("Validate_onedrive_content_metadata", "Size"), MAX_ATTACHMENT_BYTES]}, {"equals": ["@greater(body('Validate_onedrive_content_metadata')?['Size'], 0)", True]}]}, {"Check_onedrive_content_type": type_gate}, {"Reject_onedrive_content_size": error(413, "ONEDRIVE_FILE_TOO_LARGE", "The OneDrive file is empty, a folder, or exceeds the 4 MiB limit.")})
     actions["Check_onedrive_content_identity"] = condition({"equals": [field("Validate_onedrive_content_metadata", "Id"), field(validate, "fileId")]}, {"Check_onedrive_metadata_size": size_gate}, {"Reject_onedrive_content_metadata": error(502, "INVALID_ONEDRIVE_METADATA", "The upstream OneDrive metadata is invalid.")}, after("Validate_onedrive_content_metadata"))
