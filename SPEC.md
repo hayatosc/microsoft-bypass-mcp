@@ -3,430 +3,324 @@
 ## 1. Overview
 
 A read-only [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server
-that lets an LLM read university Microsoft 365 resources (Microsoft Graph)
-through a Power Automate HTTP-trigger intermediary.
+that lets an LLM read selected university Microsoft 365 resources through a
+Power Automate HTTP-trigger intermediary.
 
-The server is **not** a "Microsoft Graph MCP". It is a
-**"University Microsoft 365 Read-only MCP"**: a fixed, allow-listed surface of
-read tools that map onto fixed operations, which Power Automate turns into
-fixed Microsoft Graph calls. The server never authenticates to Graph and never
-talks to Graph directly.
+The server is **not** a Microsoft Graph MCP. It is a fixed, allow-listed surface
+of read tools that map onto fixed operations, which Power Automate turns into
+fixed Outlook Graph calls or native OneDrive for Business connector calls. The
+server never authenticates to Microsoft Graph and never talks to Graph directly.
 
-The current implementation covers the Outlook mailbox with six fixed tools
-(§8). Other Microsoft 365 apps (Teams, OneDrive, SharePoint, etc.) are added as
-new features, each following the same pattern: fixed tools -> fixed operations
--> fixed Graph endpoints.
-
-## 2. Why Power Automate is in the path
-
-Direct access to Microsoft Graph from the MCP server requires an OAuth
-app registration, consent, and secret/token management. Power Automate already
-holds the Microsoft 365 identity and can call Graph with the flow owner's
-credentials. Routing read operations through Power Automate therefore:
-
-- removes all Graph authentication from the MCP server,
-- restricts the Graph surface to whatever the flow explicitly implements,
-- keeps credentials out of the MCP server runtime.
-
-## 3. Architecture and responsibility split
+## 2. Architecture
 
 ```
 MCP Client
-    判断 user intent
-
-Remote MCP Server (this repo)
-    input validation
-    tool exposure
-    Power Automate API calls
-    response normalization
-    logging / timeout
-
-Cloudflare Access (in front of the Worker)
-    authentication (OAuth / access policy)
-
-Power Automate (runtime external; sanitized source in power-automate/)
-    operation allowlist
-    fixed Microsoft Graph endpoints
-    Microsoft 365 authentication
-
-Microsoft Graph
-    Outlook mailbox access (currently the only implemented feature)
+    ↓ MCP over Streamable HTTP (/mcp)
+Cloudflare Access
+    ↓ admitted request + Access JWT
+Remote MCP Server — Cloudflare Workers + Hono
+    ↓ HTTP POST { operation, requestId, args }
+Power Automate — operation allowlist + connector actions
+    ↓
+Microsoft 365 connectors
 ```
 
-The boundary is fixed and must not blur:
+The boundary is fixed:
 
 ```
-MCP -> fixed tools -> fixed operations -> Power Automate -> fixed Graph APIs
+MCP tool -> fixed operation -> Power Automate switch case -> fixed read action
 ```
 
-## 4. Transport and server lifecycle
+No layer accepts a caller-provided URL, route, method, body, Graph query, drive
+ID, site ID, share link, download URL, or nextLink URL.
 
-The MCP server is exposed as a **Streamable HTTP** endpoint at `/mcp`, served by
-a [Hono](https://hono.dev) app on Cloudflare Workers.
+## 3. Authentication and environment
 
-It follows the **stateless server factory** pattern from the official MCP
-TypeScript SDK (v2): a fresh `McpServer` is created from a factory for **every
-request**. No state survives between requests.
+`/mcp` is protected by Cloudflare Access and in-Worker validation of
+`Cf-Access-Jwt-Assertion`. Local development may omit `TEAM_DOMAIN` and
+`POLICY_AUD`; production must set both.
 
-```ts
-export function createOutlookMcpServer(client: PowerAutomateClient): McpServer {
-  const server = new McpServer({ name: 'university-m365', version: '0.1.0' })
-  // ...server.registerTool(...) x6...
-  return server
-}
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `POWER_AUTOMATE_URL` | yes | Power Automate HTTP-trigger URL. |
+| `POWER_AUTOMATE_GATEWAY_KEY` | yes | Sent as `X-MCP-Gateway-Key`. |
+| `TEAM_DOMAIN` | prod | Cloudflare Access team domain. |
+| `POLICY_AUD` | prod | Access Application AUD tag. |
+
+Secrets must not be committed.
+
+## 4. Power Automate protocol
+
+Every request from the Worker to the flow uses this envelope:
+
+```json
+{ "operation": "string", "requestId": "uuid-v4", "args": {} }
 ```
 
-Per request, the `/mcp` handler wraps the factory in a `createMcpHandler()`
-entry and delegates via `handler.fetch(request)`. The factory runs once per
-request, so each request gets a fresh server; the handler serves the modern
-2026-07-28 protocol revision and, via the legacy stateless fallback, 2025-era
-traffic.
+The flow authenticates `X-MCP-Gateway-Key` before any Microsoft connector action.
+Success responses are:
 
-The Power Automate client itself is **stateless** and is constructed per request
-from the environment-derived base URL.
+```json
+{ "ok": true, "requestId": "...", "operation": "...", "data": {} }
+```
 
-## 5. Endpoints and authentication
+Errors are non-2xx or sanitized `{ "ok": false, "error": { "code": "..." } }`.
+They must never include Graph/native connector raw errors, URLs, message IDs,
+file IDs, query text, subjects, body text, bytes, base64, or nextLink URLs.
 
-| Method | Path  | Purpose                                        |
-|--------|-------|------------------------------------------------|
-| GET    | `/`   | Human-readable info page (server name, tools). |
-| ALL    | `/mcp`| MCP Streamable HTTP endpoint.                  |
+The flow has no storage, cache, loops over untrusted URLs, or persistence.
 
-The `/mcp` endpoint is protected in two layers:
+## 5. Fixed tool surface
 
-1. **Cloudflare Access** (OAuth) sits in front of the Worker (on the
-   `*.workers.dev` URL and/or a custom domain), so only clients admitted by the
-   Access policy reach `/mcp`.
-2. The Worker additionally validates the Access JWT carried on the
-   `Cf-Access-Jwt-Assertion` header (via `TEAM_DOMAIN` + `POLICY_AUD`), as
-   defense in depth against requests that reach the Worker without passing
-   Access.
+The intended Worker-facing MCP surface contains 13 read-only tools:
 
-When `TEAM_DOMAIN`/`POLICY_AUD` are unset (local development, or before Access
-is configured), JWT validation is skipped.
+| Tool | Backing operation | Scope |
+| --- | --- | --- |
+| `outlook_list_messages` | `list_messages` | Message summaries with controlled mailbox/folder/filter/page args. |
+| `outlook_search_messages` | `search_messages` | First bounded search page, no filters or cursor following. |
+| `outlook_get_message` | `get_message` | One selected message body. |
+| `outlook_list_mail_folders` | `list_mail_folders` | First bounded mail-folder page. |
+| `outlook_get_conversation` | `get_conversation` | Exact `conversationId` equality across `/me/messages`, including sent mail when accessible. |
+| `outlook_list_attachments` | `list_attachments` | Attachment metadata only. |
+| `outlook_inspect_attachment` | `get_attachment` | Worker parses one bounded file attachment. |
+| `outlook_read_attachment` | `get_attachment` | Worker extracts bounded attachment text/cells/pages. |
+| `onedrive_search_files` | `onedrive_search_files` | Native OneDrive owned-file search. |
+| `onedrive_list_folder` | `onedrive_list_folder` | Native root/folder listing. |
+| `onedrive_get_metadata` | `onedrive_get_metadata` | Native metadata projection. |
+| `onedrive_inspect_file` | `onedrive_get_content` | Worker parses one bounded OneDrive file. |
+| `onedrive_read_file` | `onedrive_get_content` | Worker extracts bounded OneDrive content. |
 
-## 6. Environment
+The flow has 11 operations because Outlook inspect/read share `get_attachment`
+and OneDrive inspect/read share `onedrive_get_content`.
 
-| Variable                 | Required | Purpose                                                      |
-|--------------------------|----------|--------------------------------------------------------------|
-| `POWER_AUTOMATE_URL`     | yes      | Power Automate HTTP-trigger URL.                             |
-| `POWER_AUTOMATE_GATEWAY_KEY` | yes  | Gateway key sent as the `X-MCP-Gateway-Key` request header.  |
-| `TEAM_DOMAIN`            | prod     | Cloudflare Access team domain (`https://<team>…access.com`). |
-| `POLICY_AUD`             | prod     | Cloudflare Access Application Audience (AUD) tag.            |
+## 6. Outlook operations
 
-Missing required variables fail fast at startup/request time (no silent
-defaults). `TEAM_DOMAIN` and `POLICY_AUD` must be set together; a partially
-configured pair fails fast.
+### `list_messages`
 
-`POWER_AUTOMATE_GATEWAY_KEY`, `TEAM_DOMAIN` and `POLICY_AUD` are set as
-**Cloudflare Workers secrets** (`wrangler secret put`), not in `.dev.vars`.
-`POWER_AUTOMATE_URL` lives in `.dev.vars` for local development, as does the
-gateway key. Leaving `TEAM_DOMAIN`/`POLICY_AUD` unset skips JWT
-validation, which is the intended behavior for local development (`wrangler dev`
-has no Access in front). Values are:
+Args:
 
-- `TEAM_DOMAIN=https://<team>.cloudflareaccess.com`
-- `POLICY_AUD=<aud-tag-from-access-dashboard>`
-
-## 7. Power Automate protocol
-
-The MCP server calls the Power Automate HTTP trigger with `POST` JSON. The
-original three message operations reflect the verified existing flow shape.
-The two attachment operations are an authored extension, checked with offline
-tests and bounded authenticated runtime smoke calls. The exact live coverage and
-remaining PDF/runtime limits are recorded with the canonical flow source below.
-
-The [canonical existing-flow definition](power-automate/microsoft-bypass-flow/README.md)
-extends the sanitized export in place, preserving its three mail branches and
-adding two attachment branches to the same switch. That folder documents provenance,
-private configuration, the in-place update procedure, and preserved mail quirks.
-
-### Request body
-
-Every request POSTs to the trigger with the `X-MCP-Gateway-Key` header set to
-the gateway key (bound as `POWER_AUTOMATE_GATEWAY_KEY`); the trigger rejects
-requests without it.
-
-```jsonc
+```json
 {
-  "operation": "list_messages | search_messages | get_message | list_attachments | get_attachment",
-  "requestId": "<uuid v4, generated per request>",
-  "args": {
-    // list_messages
-    //   { "top": <number> }
-    // search_messages
-    //   { "query": "<string>", "top": <number> }
-    // get_message
-    //   { "messageId": "<string>" }
-    // list_attachments
-    //   { "messageId": "<string>", "top": <number>, "skip": <number> }
-    // get_attachment
-    //   { "messageId": "<string>", "attachmentId": "<string>" }
+  "top": 1,
+  "skip": 0,
+  "mailbox": "inbox | sent | all",
+  "folderId": "optional string",
+  "filters": {
+    "isRead": true,
+    "hasAttachments": false,
+    "receivedAfter": "ISO datetime",
+    "receivedBefore": "ISO datetime"
   }
 }
 ```
 
-- `requestId` is a UUID generated by the MCP server (via `crypto.randomUUID()`)
-  for correlation. It is the only value the server is allowed to log.
-- `top` is the Graph `$top` equivalent; the MCP tool argument is named `limit`
-  and is translated to `top` here.
+`top` is `1..50`; `skip` is `0..10000`. If `folderId` is present, mailbox is
+ignored and the fixed route is `/me/mailFolders/{folderId}/messages`. Otherwise:
 
-### Success response (HTTP 2xx)
+- `inbox` -> `/me/mailFolders/inbox/messages`
+- `sent` -> `/me/mailFolders/sentitems/messages`
+- `all` -> `/me/messages`
 
-The flow wraps the Graph response in an envelope:
+`$select` order is exactly:
 
-```jsonc
-{
-  "ok": true,
-  "requestId": "<uuid v4>",
-  "operation": "<echo of the operation>",
-  "data": { /* Graph response */ }
-}
+```text
+id,subject,from,receivedDateTime,sentDateTime,parentFolderId,conversationId,hasAttachments,importance,isRead,bodyPreview
 ```
 
-The MCP server validates that `requestId` and `operation` echo the request; a
-mismatch is surfaced as a tool error.
+Without filters, the query includes `$orderby=receivedDateTime desc`. With any
+nonempty controlled filter, `$orderby` is omitted to avoid Graph
+`InefficientFilter` combinations. Filter property order is fixed:
+`isRead`, `hasAttachments`, `receivedAfter`, `receivedBefore`. Caller-supplied
+OData is never accepted, and `$search` is never mixed with filters.
 
-`data` depends on the operation:
+The returned Graph page may include `@odata.nextLink`; it is data only. The
+Worker validates the route/query shape and extracts only a numeric `$skip` cursor.
+The flow never accepts nextLink as input.
 
-- `list_messages`, `search_messages` -> Graph list response
-  `{ "value": [ <message summary>... ] }`. Each item carries the flow's `$select`
-  fields: `id`, `subject`, `from`, `receivedDateTime`, `isRead`, `importance`,
-  `hasAttachments`, `bodyPreview`. Recipients are **not** selected here.
-- `get_message` -> a single Graph message resource with `$select` fields:
-  `id`, `subject`, `from`, `toRecipients`, `ccRecipients`, `receivedDateTime`,
-  `isRead`, `importance`, `hasAttachments`, `body`.
+### `search_messages`
 
-### Error response
+Args: `{ "query": "trimmed nonempty string, max 512", "top": 1..50,
+"mailbox"?: "inbox|sent|all", "folderId"?: "string" }`.
 
-Non-2xx (e.g. `400` on schema mismatch, `502` on upstream Graph failure) with a
-body of the shape `{ "error": { "code", "message", ... } }`.
+Route selection mirrors `list_messages`. There is no filter, skip, cursor, URL,
+method, route, or body argument. The first bounded page is returned only.
 
-The existing mail branches retain two known differences: missing `messageId` returns
-HTTP 200 with `ok: false`, and upstream failures have no explicit error-response
-action. These behaviors remain unchanged in the extended canonical source. The
-new attachment branches alone add strict validation and sanitized failure responses.
+### `get_message`
 
-The MCP server is responsible for **normalizing** `data` into the tool output
-schemas (§8). Non-2xx responses and malformed payloads are surfaced as tool
-errors.
+Args: `{ "messageId": "bounded ID" }`.
 
-> Field availability is controlled entirely by the flow's Graph `$select`. If
-> the flow is updated to also `$select` `toRecipients` in list/search, or
-> `sentDateTime`/`conversationId` in get, the MCP server shapes in §8 must be
-> extended to match.
+Fixed route `/me/messages/{messageId}` with selected fields:
 
-## 8. MCP tools
+```text
+id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,parentFolderId,conversationId,hasAttachments,importance,isRead,bodyPreview,body
+```
 
-Six fixed read-only tools. Every tool defines an `inputSchema` and an `outputSchema`, and
-returns both `content` (text, for the LLM) and `structuredContent` (validated
-against `outputSchema`, for programs).
+### `list_mail_folders`
 
-### Tool result shape (all tools)
+Args: `{ "top": 1..50 }`.
+
+Fixed route `/me/mailFolders` with `$top` and selected fields
+`id,displayName,parentFolderId,childFolderCount,totalItemCount,unreadItemCount`.
+The Worker reports bounded/incomplete if the page has a nextLink; it does not
+follow the URL.
+
+### `get_conversation`
+
+Args: `{ "conversationId": "bounded ID", "top": 1..50, "skip": 0..10000 }`.
+
+Fixed route `/me/messages`, so sent mail is included when accessible. The query
+uses exact escaped OData equality:
+
+```text
+$filter=conversationId eq '<single-quote-doubled conversationId>'
+```
+
+It uses the same detail `$select` as `get_message`. It deliberately has **no
+`$orderby`** because mixing `conversationId` filter with received-date order can
+violate Graph `InefficientFilter` requirements. The Worker may sort each returned
+page locally, but must not claim global ordering. No mailbox-slice fallback is
+allowed. The Worker rejects returned messages whose `conversationId` differs and
+rejects duplicate IDs within a returned page.
+
+### Attachment operations
+
+`list_attachments` and `get_attachment` preserve the attachment contract in
+`docs/attachments.md`. The flow uses only fixed message attachment Graph routes,
+never follows reference URLs or nextLink, never returns list `contentBytes`, and
+returns `contentBytes` only as internal Worker transport for file attachments.
+
+## 7. OneDrive native operations
+
+OneDrive operations use only the signed-in account's native OneDrive for Business
+connector, not Outlook HTTP and not Graph proxy routes.
+
+Allowed native operation IDs are:
+
+- `FindFiles(query,id,findMode,maxFileCount)` with `maxFileCount` `1..100`
+- `GetFileMetadata(id)`
+- `GetFileContent(id,inferContentType)`
+- `ListFolderV2(id)`
+- `ListRootFolder()`
+
+The generated public source uses visible placeholders for values that require
+manual tenant/designer verification during authorized import:
+
+- `OneDriveSearchMode` for the verified native `findMode` machine value
+- `OneDriveSearchRootId` for the connection owner's native root folder ID
+
+Both are public String parameters with empty defaults. Search fails closed with
+HTTP 503 before any connector action until both are set during authorized setup.
+The connector alias `shared_onedriveforbusiness` must also be bound to the owner's
+connection; this source contains no connection ID or authentication secret.
+
+The flow must not accept arbitrary drive IDs, site IDs, share links, web URLs,
+download URLs, provider URLs, route, method, body, or nextLink fields.
+
+### Metadata projection
+
+Native OneDrive metadata can contain `Id`, `Name`, `Size`, `MediaType`,
+`IsFolder`, `LastModified`, `ETag`, `Path`, `NameNoExt`, `DisplayName`, and
+`FileLocator`. The flow projects only these permitted metadata fields internally
+and returns only:
 
 ```ts
-return {
-  content: [{ type: 'text', text: JSON.stringify(result) }],
-  structuredContent: result,
+type OneDriveMetadata = {
+  Id: string
+  Name: string
+  Size: number
+  MediaType: string
+  IsFolder: boolean
+  LastModified?: string | null
+  ETag?: string | null
 }
 ```
 
-### `outlook_list_messages`
+### `onedrive_search_files`
 
-List the most recent inbox messages (metadata only).
+Args: `{ "query": "trimmed nonempty string, max 512", "top": 1..100 }`.
 
-- Input: `{ limit?: number }` — default `5`, range `1..50`.
-- Output: `{ messages: MessageSummary[], hasMore: boolean }`
+Returns a bounded page with `value` and `truncated`. Native nextLink presence is
+folded into that flag without exposing the URL. If native `FindFiles`
+returns exactly the connector/requested maximum, the result is conservatively
+marked potentially truncated; the server must not claim complete enumeration.
 
-### `outlook_search_messages`
+### `onedrive_list_folder`
 
-Search inbox messages by a free-text query.
+Args: `{ "folderId"?: "bounded ID", "top": 1..100 }`.
 
-- Input: `{ query: string, limit?: number }` — `query` required (non-empty),
-  `limit` default `10`, range `1..50`.
-- Output: `{ messages: MessageSummary[], hasMore: boolean }`
+Omitted `folderId` uses `ListRootFolder`; present `folderId` uses
+`ListFolderV2(id)`. `ListFolderV2` native `nextLink` is never returned or
+accepted as input. The Worker uses only a bounded incomplete flag.
 
-### `outlook_get_message`
+### `onedrive_get_metadata`
 
-Fetch a full message (including body) by ID.
+Args: `{ "fileId": "bounded ID" }`.
 
-- Input: `{ messageId: string }`
-- Output: `MessageDetail`
+Uses `GetFileMetadata(id)` and verifies the returned identity when exposed.
+The Worker verifies identity again.
 
-### Attachment tools
+### `onedrive_get_content`
 
-`outlook_list_attachments({ messageId, limit?, offset? })` lists metadata only.
-The default limit is 20 (1–50); offset is 0–10,000. A response has `messageId`,
-`attachments`, `hasMore`, and `nextOffset` (null at end or the offset safety cap).
-Worker calls `list_attachments({ messageId, top: limit, skip: offset })`.
-Neither layer follows an arbitrary Graph nextLink.
+Args: `{ "fileId": "bounded ID" }`.
 
-`outlook_inspect_attachment({ messageId, attachmentId })` fetches one file via
-`get_attachment` and returns `source`, `untrustedContent: true`, and `structure`:
-PDF page count, DOCX heading sections/paragraph counts/text offsets, or XLSX
-sheet names/observed dimensions. `outlook_read_attachment` uses the same target
-plus a format-specific `selection`, returning `source`, `untrustedContent`, and
-`data` with page, text-offset or cell-address provenance.
+The flow first fetches fresh metadata, validates identity, `IsFolder=false`,
+`0 < Size <= 4 MiB`, and a supported PDF/DOCX/XLSX extension with a matching or generic MIME type. Only
+then does it call `GetFileContent(id,inferContentType=true)`.
 
-The flow extension's `get_attachment({ messageId, attachmentId })` returns a
-Graph fileAttachment including internal base64 `contentBytes`; this never reaches
-MCP outputs. The flow checks metadata/type/size before downloading content. Both
-layers enforce fixed GET paths, bounded IDs, and size limits. Only PDF, DOCX and
-XLSX file attachments are eligible; reference/item attachments and external links
-are never fetched. All attachment-derived content is untrusted.
+Microsoft Logic Apps represents binary bodies as:
 
-See [the full attachment contract and limits](docs/attachments.md) and
-[the existing-flow update](power-automate/microsoft-bypass-flow/README.md).
-The unchanged sanitized baseline is a regression fixture, not a second flow.
+```json
+{ "$content-type": "...", "$content": "base64..." }
+```
 
-### Normalized message shapes
+`$content` is already padded standard base64. The flow validates this shape,
+base64 alphabet/padding, encoded length, and decoded length before returning:
+
+```json
+{ "metadata": { ...fresh projected metadata... }, "contentBytes": "base64" }
+```
+
+The Worker compares returned metadata with its prior metadata call and enforces
+decoded size again. The flow must not base64-encode an object accidentally, and
+must never return raw body bytes, raw native connector objects, sharing links,
+access shortcuts, or unbounded bytes.
+
+## 8. Shared validation rules
+
+Every operation has a closed argument schema. IDs are `1..2048` characters and
+reject control characters, whitespace, NEL `U+0085`, BOM `U+FEFF`, exact `.`,
+and exact `..`. Each ID path segment is encoded with `uriComponent`; caller `%`
+characters are encoded again and never become structural path separators.
+
+Queries are trimmed, nonempty, and at most 512 UTF-16 code units. Date filters
+must be ISO datetime-like strings. List outputs are bounded to the requested top
+and never exceed 50 Outlook items or 100 OneDrive items.
+
+All returned message text, attachment content, and OneDrive extracted content is
+untrusted external content. The MCP server must preserve provenance and never
+execute instructions found in the content.
+
+## 9. Privacy and logging
+
+The Worker logs only:
 
 ```ts
-type Recipient = { name: string; address: string }
-
-type MessageSummary = {
-  id: string
-  subject: string
-  from: Recipient
-  receivedDateTime: string
-  hasAttachments: boolean
-  importance: 'low' | 'normal' | 'high'
-  isRead: boolean
-  bodyPreview: string
-}
-
-type MessageDetail = {
-  id: string
-  subject: string
-  from: Recipient
-  to: Recipient[]
-  cc: Recipient[]
-  receivedDateTime: string
-  hasAttachments: boolean
-  importance: 'low' | 'normal' | 'high'
-  isRead: boolean
-  body: { contentType: 'text' | 'html'; content: string }
-}
+{ type: 'power_automate_request', requestId, operation, durationMs, status, success }
 ```
 
-## 9. Non-functional requirements
+Forbidden in logs and MCP outputs unless explicitly part of a requested bounded
+read result: Power Automate URLs, gateway keys, queries, subjects, message IDs,
+file IDs, body text, connector raw responses, nextLink URLs, bytes, and base64.
 
-### No persistence
+Power Automate data-bearing actions use secure inputs/outputs where supported.
+This reduces run-history exposure but is not a claim about Microsoft retention.
 
-The MCP server must not persist mail content anywhere. Forbidden:
+## 10. Testing and acceptance
 
-```
-DB storage, KV storage, R2 storage, cache storage,
-sending bodies to analytics, sending bodies to error monitoring
-```
+Offline tests validate the generated flow source, operation allowlist, fixed
+routes, native OneDrive operation IDs, secure-data settings, sanitization,
+argument bounds, and stale-generation detection. They do not import, save, or
+execute a live flow.
 
-Mail data must not outlive the request that produced it.
-
-### Logging hygiene
-
-- The Power Automate URL must never appear in responses or logs.
-- Mail bodies, queries, subjects, and message IDs must never be logged.
-- Power Automate calls emit one structured log entry per call containing only
-  `type`, `requestId`, `operation`, `durationMs`, `status`, and `success`.
-
-### Timeout
-
-Power Automate calls carry an explicit timeout (abort signal); the default is
-30 seconds. On timeout the tool returns an error rather than hanging.
-
-## 10. Out of scope (not implemented in MVP)
-
-```
-send_message, create_draft, delete_message, move_message,
-mark_as_read, mark_as_unread, message-list pagination,
-mail-folder selection, sent items, calendar, contacts,
-other Microsoft 365 apps (Teams, OneDrive, SharePoint, etc.),
-arbitrary Graph API proxy
-```
-
-Individual tools are added later only if a concrete need arises. A generic
-proxy tool — passing `{ url, method, body }` from the MCP tool to Power
-Automate — must **never** be built.
-
-## 11. Tech stack and tooling
-
-- Runtime: Cloudflare Workers (`wrangler`)
-- Web framework: Hono
-- MCP: `@modelcontextprotocol/server` (v2)
-- JWT validation: `jose`
-- Validation/schemas: Zod v4
-- Package manager: bun
-- Language: TypeScript (ESM-first, `strict`)
-- Typecheck: `tsc --noEmit`
-- Test: Vitest
-- Lint: oxlint
-- Format: oxfmt
-
-## 12. Testing
-
-### Unit tests (mock `fetch`)
-
-For `list_messages`, `search_messages`, `get_message`, verify:
-
-- the correct operation is sent,
-- a `requestId` is generated,
-- `limit` is translated to `top`,
-- response normalization,
-- error handling,
-- timeout.
-
-Attachment tests cover synthetic PDF/DOCX/XLSX bytes, malformed inputs, range and
-expansion limits, and provenance. The existing Vitest command uses the official
-`@cloudflare/vitest-plugin` integration configured from `wrangler.jsonc`; Hono
-`app.request` and MCP in-memory tests use mocked flow responses and real synthetic
-file fixtures. Flow tests cover operation schemas, expressions, routing, redaction,
-and exact preservation of the legacy mail branches; they do not execute Microsoft's runtime.
-
-### Integration test
-
-Use the official **MCP Inspector** against the `/mcp` Streamable HTTP endpoint
-to exercise `outlook_list_messages`, `outlook_search_messages`,
-`outlook_get_message`.
-
-### End-to-end (gated)
-
-Live tests may run only when `POWER_AUTOMATE_URL` points at the real flow. Normal
-CI must never touch the real university mailbox.
-
-## 13. Acceptance criteria
-
-MVP is complete when all of the following hold.
-
-### MCP
-
-- Can connect to `/mcp` over Streamable HTTP.
-- `tools/list` shows the six fixed tools.
-
-### list
-
-`outlook_list_messages({ limit: 5 })` returns metadata for up to the 5 most
-recent messages.
-
-### search
-
-`outlook_search_messages({ query: "PMDA", limit: 10 })` returns search results.
-
-### get
-
-An ID obtained from list/search, passed to `outlook_get_message({ messageId })`,
-returns the full message body.
-
-### Security
-
-- The Power Automate URL never appears in responses.
-- The Power Automate URL never appears in logs.
-- `/mcp` is unreachable unless Cloudflare Access (OAuth) admits the client.
-- Mail bodies never appear in logs.
-- No generic Graph proxy exists.
-
-## 14. Design principles
-
-This server is "University Microsoft 365 Read-only MCP", not "Microsoft Graph
-MCP". Keep the layer boundary intact: fixed tools -> fixed operations -> fixed
-Graph APIs. Prefer the smallest version that works end-to-end and grow from
-there.
+Live flow runs, connector rebinding, deployment, and merge require separate
+authorization. The public flow source is not an importable package.

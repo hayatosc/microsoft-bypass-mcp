@@ -13,6 +13,14 @@
     "McpGatewayKey": {
       "defaultValue": "",
       "type": "SecureString"
+    },
+    "OneDriveSearchRootId": {
+      "type": "String",
+      "defaultValue": ""
+    },
+    "OneDriveSearchMode": {
+      "type": "String",
+      "defaultValue": ""
     }
   },
   "triggers": {
@@ -27,30 +35,23 @@
               "type": "string",
               "enum": [
                 "list_messages",
-                "get_message",
                 "search_messages",
+                "get_message",
+                "list_mail_folders",
+                "get_conversation",
                 "list_attachments",
-                "get_attachment"
+                "get_attachment",
+                "onedrive_search_files",
+                "onedrive_list_folder",
+                "onedrive_get_metadata",
+                "onedrive_get_content"
               ]
             },
             "requestId": {
               "type": "string"
             },
             "args": {
-              "type": "object",
-              "properties": {
-                "top": {
-                  "type": "integer",
-                  "minimum": 1,
-                  "maximum": 50
-                },
-                "messageId": {
-                  "type": "string"
-                },
-                "query": {
-                  "type": "string"
-                }
-              }
+              "type": "object"
             }
           },
           "required": [
@@ -65,7 +66,14 @@
         {
           "expression": "@and(not(empty(parameters('McpGatewayKey'))),equals(triggerOutputs()?['headers']?['X-MCP-Gateway-Key'],parameters('McpGatewayKey')))"
         }
-      ]
+      ],
+      "runtimeConfiguration": {
+        "secureData": {
+          "properties": [
+            "outputs"
+          ]
+        }
+      }
     }
   },
   "actions": {
@@ -75,11 +83,331 @@
         "list_messages": {
           "case": "list_messages",
           "actions": {
-            "HTTP_要求を送信します": {
+            "Validate_list_messages_request": {
+              "type": "ParseJson",
+              "runAfter": {},
+              "inputs": {
+                "content": "@triggerBody()",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "operation": {
+                      "type": "string",
+                      "enum": [
+                        "list_messages"
+                      ]
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 36,
+                      "maxLength": 36
+                    },
+                    "args": {
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "operation",
+                    "requestId",
+                    "args"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_list_messages_request": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_list_messages_request": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "The request envelope is invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_list_messages_request_format": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_list_messages_request": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@and(equals(length(toLower(replace(body('Validate_list_messages_request')?['requestId'], '-', ''))), 32), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(replace(body('Validate_list_messages_request')?['requestId'], '-', '')), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), 'a', ''), 'b', ''), 'c', ''), 'd', ''), 'e', ''), 'f', ''), ''), equals(substring(body('Validate_list_messages_request')?['requestId'], 8, 1), '-'), equals(substring(body('Validate_list_messages_request')?['requestId'], 13, 1), '-'), equals(substring(body('Validate_list_messages_request')?['requestId'], 18, 1), '-'), equals(substring(body('Validate_list_messages_request')?['requestId'], 23, 1), '-'), equals(substring(body('Validate_list_messages_request')?['requestId'], 14, 1), '4'), contains('89ab', toLower(substring(body('Validate_list_messages_request')?['requestId'], 19, 1))))",
+                "schema": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_list_messages_request_format": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_list_messages_request_format": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "The request envelope is invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_list_messages_args": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_list_messages_request_format": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@body('Validate_list_messages_request')?['args']",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "top": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 50
+                    },
+                    "skip": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 10000
+                    },
+                    "mailbox": {
+                      "type": "string",
+                      "enum": [
+                        "inbox",
+                        "sent",
+                        "all"
+                      ]
+                    },
+                    "folderId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048
+                    },
+                    "filters": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "isRead": {
+                          "type": "boolean"
+                        },
+                        "hasAttachments": {
+                          "type": "boolean"
+                        },
+                        "receivedAfter": {
+                          "type": "string",
+                          "minLength": 20,
+                          "maxLength": 28
+                        },
+                        "receivedBefore": {
+                          "type": "string",
+                          "minLength": 20,
+                          "maxLength": 28
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "top"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_list_messages_args": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_list_messages_args": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_list_messages_controls": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_list_messages_args": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@and(and(not(equals(coalesce(body('Validate_list_messages_args')?['folderId'], 'unused'), '.')), not(equals(coalesce(body('Validate_list_messages_args')?['folderId'], 'unused'), '..')), equals(length(uriComponent(coalesce(body('Validate_list_messages_args')?['folderId'], 'unused'))), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(coalesce(body('Validate_list_messages_args')?['folderId'], 'unused')), '%0', ''), '%1', ''), '%20', ''), '%7F', ''), '%C2%85', ''), '%C2%A0', ''), '%E1%9A%80', ''), '%E2%80%80', ''), '%E2%80%81', ''), '%E2%80%82', ''), '%E2%80%83', ''), '%E2%80%84', ''), '%E2%80%85', ''), '%E2%80%86', ''), '%E2%80%87', ''), '%E2%80%88', ''), '%E2%80%89', ''), '%E2%80%8A', ''), '%E2%80%A8', ''), '%E2%80%A9', ''), '%E2%80%AF', ''), '%E2%81%9F', ''), '%E3%80%80', ''), '%EF%BB%BF', '')))), and(equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(coalesce(body('Validate_list_messages_args')?['filters']?['receivedAfter'], '2000-01-01T00:00:00Z'), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), '-', ''), ':', ''), '.', ''), 'T', ''), 'Z', ''), ''), equals(substring(coalesce(body('Validate_list_messages_args')?['filters']?['receivedAfter'], '2000-01-01T00:00:00Z'), 10, 1), 'T'), endsWith(coalesce(body('Validate_list_messages_args')?['filters']?['receivedAfter'], '2000-01-01T00:00:00Z'), 'Z'), greaterOrEquals(ticks(coalesce(body('Validate_list_messages_args')?['filters']?['receivedAfter'], '2000-01-01T00:00:00Z')), 0)), and(equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(coalesce(body('Validate_list_messages_args')?['filters']?['receivedBefore'], '2000-01-01T00:00:00Z'), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), '-', ''), ':', ''), '.', ''), 'T', ''), 'Z', ''), ''), equals(substring(coalesce(body('Validate_list_messages_args')?['filters']?['receivedBefore'], '2000-01-01T00:00:00Z'), 10, 1), 'T'), endsWith(coalesce(body('Validate_list_messages_args')?['filters']?['receivedBefore'], '2000-01-01T00:00:00Z'), 'Z'), greaterOrEquals(ticks(coalesce(body('Validate_list_messages_args')?['filters']?['receivedBefore'], '2000-01-01T00:00:00Z')), 0)), or(equals(body('Validate_list_messages_args')?['filters']?['receivedAfter'], null), equals(body('Validate_list_messages_args')?['filters']?['receivedBefore'], null), less(ticks(coalesce(body('Validate_list_messages_args')?['filters']?['receivedAfter'], '0001-01-01T00:00:00Z')), ticks(coalesce(body('Validate_list_messages_args')?['filters']?['receivedBefore'], '9999-12-31T23:59:59Z')))))",
+                "schema": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_list_messages_controls": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_list_messages_controls": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Compose_list_messages_route": {
+              "type": "Compose",
+              "runAfter": {
+                "Validate_list_messages_controls": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": "@if(not(empty(body('Validate_list_messages_args')?['folderId'])), concat('mailFolders/', uriComponent(coalesce(body('Validate_list_messages_args')?['folderId'], 'unused')), '/messages'), if(equals(coalesce(body('Validate_list_messages_args')?['mailbox'], 'inbox'), 'sent'), 'mailFolders/sentitems/messages', if(equals(coalesce(body('Validate_list_messages_args')?['mailbox'], 'inbox'), 'all'), 'messages', 'mailFolders/inbox/messages')))",
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Compose_list_messages_filter": {
+              "type": "Compose",
+              "runAfter": {
+                "Compose_list_messages_route": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": "@concat(if(equals(body('Validate_list_messages_args')?['filters']?['isRead'], null), '', concat('isRead eq ', toLower(string(body('Validate_list_messages_args')?['filters']?['isRead'])))),if(equals(body('Validate_list_messages_args')?['filters']?['hasAttachments'], null), '', concat(if(equals(body('Validate_list_messages_args')?['filters']?['isRead'], null), '', ' and '), 'hasAttachments eq ', toLower(string(body('Validate_list_messages_args')?['filters']?['hasAttachments'])))),if(empty(body('Validate_list_messages_args')?['filters']?['receivedAfter']), '', concat(if(or(not(equals(body('Validate_list_messages_args')?['filters']?['isRead'], null)), not(equals(body('Validate_list_messages_args')?['filters']?['hasAttachments'], null))), ' and ', ''), 'receivedDateTime ge ', body('Validate_list_messages_args')?['filters']?['receivedAfter'])),if(empty(body('Validate_list_messages_args')?['filters']?['receivedBefore']), '', concat(if(or(not(equals(body('Validate_list_messages_args')?['filters']?['isRead'], null)), not(equals(body('Validate_list_messages_args')?['filters']?['hasAttachments'], null)), not(empty(body('Validate_list_messages_args')?['filters']?['receivedAfter']))), ' and ', ''), 'receivedDateTime lt ', body('Validate_list_messages_args')?['filters']?['receivedBefore'])))",
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Graph_list_messages": {
               "type": "OpenApiConnection",
+              "runAfter": {
+                "Compose_list_messages_filter": [
+                  "Succeeded"
+                ]
+              },
               "inputs": {
                 "parameters": {
-                  "Uri": "@concat(\r\n  'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?$select=id,subject,from,receivedDateTime,isRead,importance,hasAttachments,bodyPreview&$orderby=receivedDateTime%20desc&$top=',\r\n  string(coalesce(triggerBody()?['args']?['top'], 20))\r\n)",
+                  "Uri": "@concat('https://graph.microsoft.com/v1.0/me/', outputs('Compose_list_messages_route'), '?$top=', string(body('Validate_list_messages_args')?['top']), '&$skip=', string(coalesce(body('Validate_list_messages_args')?['skip'], 0)), '&$select=id,subject,from,receivedDateTime,sentDateTime,parentFolderId,conversationId,hasAttachments,importance,isRead,bodyPreview', if(empty(outputs('Compose_list_messages_filter')), '&$orderby=receivedDateTime%20desc', concat('&$filter=', uriComponent(outputs('Compose_list_messages_filter')))))",
                   "Method": "GET",
                   "CustomHeader1": "Prefer: IdType=\"ImmutableId\"",
                   "ContentType": "application/json"
@@ -89,23 +417,78 @@
                   "connectionName": "shared_office365",
                   "operationId": "HttpRequest"
                 },
-                "authentication": "@parameters('$authentication')"
+                "authentication": "@parameters('$authentication')",
+                "retryPolicy": {
+                  "type": "none"
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs",
+                    "outputs"
+                  ]
+                }
               }
             },
-            "応答": {
+            "Error_Graph_list_messages": {
+              "type": "Response",
+              "kind": "Http",
               "runAfter": {
-                "HTTP_要求を送信します": [
+                "Graph_list_messages": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 502,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "UPSTREAM_ERROR",
+                    "message": "The upstream read could not be completed."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Respond_list_messages": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Graph_list_messages": [
                   "Succeeded"
                 ]
               },
-              "type": "Response",
-              "kind": "Http",
               "inputs": {
                 "statusCode": 200,
                 "headers": {
-                  "Content-Type": "application/json"
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
                 },
-                "body": "@addProperty(\r\n  addProperty(\r\n    addProperty(\r\n      addProperty(\r\n        json('{}'),\r\n        'ok',\r\n        true\r\n      ),\r\n      'requestId',\r\n      triggerBody()?['requestId']\r\n    ),\r\n    'operation',\r\n    triggerBody()?['operation']\r\n  ),\r\n  'data',\r\n  body('HTTP_要求を送信します')\r\n)"
+                "body": {
+                  "ok": true,
+                  "requestId": "@triggerBody()?['requestId']",
+                  "operation": "@triggerBody()?['operation']",
+                  "data": "@body('Graph_list_messages')"
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
               }
             }
           }
@@ -113,87 +496,636 @@
         "get_message": {
           "case": "get_message",
           "actions": {
-            "条件": {
-              "actions": {
-                "応答_4": {
-                  "type": "Response",
-                  "kind": "Http",
-                  "inputs": {
-                    "statusCode": 200,
-                    "headers": {
-                      "Content-Type": "application/json"
-                    },
-                    "body": {
-                      "ok": false,
-                      "requestId": "@{triggerBody()?['requestId']}",
-                      "error": {
-                        "code": "MISSING_MESSAGE_ID",
-                        "message": "messageId is required."
-                      }
-                    }
-                  }
-                }
-              },
-              "else": {
-                "actions": {
-                  "HTTP_要求を送信します_1": {
-                    "type": "OpenApiConnection",
-                    "inputs": {
-                      "parameters": {
-                        "Uri": "@concat(\r\n  'https://graph.microsoft.com/v1.0/me/messages/',\r\n  uriComponent(triggerBody()?['args']?['messageId']),\r\n  '?$select=id,subject,from,toRecipients,ccRecipients,receivedDateTime,isRead,importance,hasAttachments,body'\r\n)",
-                        "Method": "GET",
-                        "CustomHeader1": "Prefer: IdType=\"ImmutableId\"",
-                        "CustomHeader2": "Prefer: outlook.body-content-type=\"text\"",
-                        "ContentType": "application/json"
-                      },
-                      "host": {
-                        "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
-                        "connectionName": "shared_office365",
-                        "operationId": "HttpRequest"
-                      },
-                      "authentication": "@parameters('$authentication')"
-                    }
-                  },
-                  "応答_1": {
-                    "runAfter": {
-                      "HTTP_要求を送信します_1": [
-                        "Succeeded"
+            "Validate_get_message_request": {
+              "type": "ParseJson",
+              "runAfter": {},
+              "inputs": {
+                "content": "@triggerBody()",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "operation": {
+                      "type": "string",
+                      "enum": [
+                        "get_message"
                       ]
                     },
-                    "type": "Response",
-                    "kind": "Http",
-                    "inputs": {
-                      "statusCode": 200,
-                      "headers": {
-                        "Content-Type": "application/json"
-                      },
-                      "body": "@addProperty(\r\n  addProperty(\r\n    addProperty(\r\n      addProperty(\r\n        json('{}'),\r\n        'ok',\r\n        true\r\n      ),\r\n      'requestId',\r\n      triggerBody()?['requestId']\r\n    ),\r\n    'operation',\r\n    triggerBody()?['operation']\r\n  ),\r\n  'data',\r\n  body('HTTP_要求を送信します_1')\r\n)"
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 36,
+                      "maxLength": 36
+                    },
+                    "args": {
+                      "type": "object"
                     }
+                  },
+                  "required": [
+                    "operation",
+                    "requestId",
+                    "args"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_get_message_request": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_get_message_request": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "The request envelope is invalid."
                   }
                 }
               },
-              "expression": {
-                "and": [
-                  {
-                    "equals": [
-                      "@empty(triggerBody()?['args']?['messageId'])",
-                      true
-                    ]
-                  }
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_get_message_request_format": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_get_message_request": [
+                  "Succeeded"
                 ]
               },
-              "type": "If"
+              "inputs": {
+                "content": "@and(equals(length(toLower(replace(body('Validate_get_message_request')?['requestId'], '-', ''))), 32), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(replace(body('Validate_get_message_request')?['requestId'], '-', '')), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), 'a', ''), 'b', ''), 'c', ''), 'd', ''), 'e', ''), 'f', ''), ''), equals(substring(body('Validate_get_message_request')?['requestId'], 8, 1), '-'), equals(substring(body('Validate_get_message_request')?['requestId'], 13, 1), '-'), equals(substring(body('Validate_get_message_request')?['requestId'], 18, 1), '-'), equals(substring(body('Validate_get_message_request')?['requestId'], 23, 1), '-'), equals(substring(body('Validate_get_message_request')?['requestId'], 14, 1), '4'), contains('89ab', toLower(substring(body('Validate_get_message_request')?['requestId'], 19, 1))))",
+                "schema": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_get_message_request_format": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_get_message_request_format": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "The request envelope is invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_get_message_args": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_get_message_request_format": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@body('Validate_get_message_request')?['args']",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "messageId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048
+                    }
+                  },
+                  "required": [
+                    "messageId"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_get_message_args": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_get_message_args": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_get_message_controls": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_get_message_args": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@and(not(equals(coalesce(body('Validate_get_message_args')?['messageId'], 'unused'), '.')), not(equals(coalesce(body('Validate_get_message_args')?['messageId'], 'unused'), '..')), equals(length(uriComponent(coalesce(body('Validate_get_message_args')?['messageId'], 'unused'))), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(coalesce(body('Validate_get_message_args')?['messageId'], 'unused')), '%0', ''), '%1', ''), '%20', ''), '%7F', ''), '%C2%85', ''), '%C2%A0', ''), '%E1%9A%80', ''), '%E2%80%80', ''), '%E2%80%81', ''), '%E2%80%82', ''), '%E2%80%83', ''), '%E2%80%84', ''), '%E2%80%85', ''), '%E2%80%86', ''), '%E2%80%87', ''), '%E2%80%88', ''), '%E2%80%89', ''), '%E2%80%8A', ''), '%E2%80%A8', ''), '%E2%80%A9', ''), '%E2%80%AF', ''), '%E2%81%9F', ''), '%E3%80%80', ''), '%EF%BB%BF', ''))))",
+                "schema": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_get_message_controls": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_get_message_controls": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Graph_get_message": {
+              "type": "OpenApiConnection",
+              "runAfter": {
+                "Validate_get_message_controls": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "parameters": {
+                  "Uri": "@concat('https://graph.microsoft.com/v1.0/me/messages/', uriComponent(body('Validate_get_message_args')?['messageId']), '?$select=id,subject,from,receivedDateTime,sentDateTime,parentFolderId,conversationId,hasAttachments,importance,isRead,bodyPreview,toRecipients,ccRecipients,body')",
+                  "Method": "GET",
+                  "CustomHeader1": "Prefer: IdType=\"ImmutableId\"",
+                  "ContentType": "application/json",
+                  "CustomHeader2": "Prefer: outlook.body-content-type=\"text\""
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                  "connectionName": "shared_office365",
+                  "operationId": "HttpRequest"
+                },
+                "authentication": "@parameters('$authentication')",
+                "retryPolicy": {
+                  "type": "none"
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs",
+                    "outputs"
+                  ]
+                }
+              }
+            },
+            "Error_Graph_get_message": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Graph_get_message": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 502,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "UPSTREAM_ERROR",
+                    "message": "The upstream read could not be completed."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Respond_get_message": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Graph_get_message": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "statusCode": 200,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": true,
+                  "requestId": "@triggerBody()?['requestId']",
+                  "operation": "@triggerBody()?['operation']",
+                  "data": "@body('Graph_get_message')"
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
             }
           }
         },
         "search_messages": {
           "case": "search_messages",
           "actions": {
-            "HTTP_要求を送信します_2": {
+            "Validate_search_messages_request": {
+              "type": "ParseJson",
+              "runAfter": {},
+              "inputs": {
+                "content": "@triggerBody()",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "operation": {
+                      "type": "string",
+                      "enum": [
+                        "search_messages"
+                      ]
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 36,
+                      "maxLength": 36
+                    },
+                    "args": {
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "operation",
+                    "requestId",
+                    "args"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_search_messages_request": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_search_messages_request": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "The request envelope is invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_search_messages_request_format": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_search_messages_request": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@and(equals(length(toLower(replace(body('Validate_search_messages_request')?['requestId'], '-', ''))), 32), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(replace(body('Validate_search_messages_request')?['requestId'], '-', '')), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), 'a', ''), 'b', ''), 'c', ''), 'd', ''), 'e', ''), 'f', ''), ''), equals(substring(body('Validate_search_messages_request')?['requestId'], 8, 1), '-'), equals(substring(body('Validate_search_messages_request')?['requestId'], 13, 1), '-'), equals(substring(body('Validate_search_messages_request')?['requestId'], 18, 1), '-'), equals(substring(body('Validate_search_messages_request')?['requestId'], 23, 1), '-'), equals(substring(body('Validate_search_messages_request')?['requestId'], 14, 1), '4'), contains('89ab', toLower(substring(body('Validate_search_messages_request')?['requestId'], 19, 1))))",
+                "schema": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_search_messages_request_format": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_search_messages_request_format": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "The request envelope is invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_search_messages_args": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_search_messages_request_format": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@body('Validate_search_messages_request')?['args']",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "query": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 512
+                    },
+                    "top": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 50
+                    },
+                    "mailbox": {
+                      "type": "string",
+                      "enum": [
+                        "inbox",
+                        "sent",
+                        "all"
+                      ]
+                    },
+                    "folderId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048
+                    }
+                  },
+                  "required": [
+                    "query",
+                    "top"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_search_messages_args": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_search_messages_args": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_search_messages_controls": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_search_messages_args": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@and(and(not(empty(trim(body('Validate_search_messages_args')?['query']))), lessOrEquals(length(trim(body('Validate_search_messages_args')?['query'])), 512)), and(not(equals(coalesce(body('Validate_search_messages_args')?['folderId'], 'unused'), '.')), not(equals(coalesce(body('Validate_search_messages_args')?['folderId'], 'unused'), '..')), equals(length(uriComponent(coalesce(body('Validate_search_messages_args')?['folderId'], 'unused'))), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(coalesce(body('Validate_search_messages_args')?['folderId'], 'unused')), '%0', ''), '%1', ''), '%20', ''), '%7F', ''), '%C2%85', ''), '%C2%A0', ''), '%E1%9A%80', ''), '%E2%80%80', ''), '%E2%80%81', ''), '%E2%80%82', ''), '%E2%80%83', ''), '%E2%80%84', ''), '%E2%80%85', ''), '%E2%80%86', ''), '%E2%80%87', ''), '%E2%80%88', ''), '%E2%80%89', ''), '%E2%80%8A', ''), '%E2%80%A8', ''), '%E2%80%A9', ''), '%E2%80%AF', ''), '%E2%81%9F', ''), '%E3%80%80', ''), '%EF%BB%BF', '')))))",
+                "schema": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_search_messages_controls": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_search_messages_controls": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Compose_search_messages_route": {
+              "type": "Compose",
+              "runAfter": {
+                "Validate_search_messages_controls": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": "@if(not(empty(body('Validate_search_messages_args')?['folderId'])), concat('mailFolders/', uriComponent(coalesce(body('Validate_search_messages_args')?['folderId'], 'unused')), '/messages'), if(equals(coalesce(body('Validate_search_messages_args')?['mailbox'], 'inbox'), 'sent'), 'mailFolders/sentitems/messages', if(equals(coalesce(body('Validate_search_messages_args')?['mailbox'], 'inbox'), 'all'), 'messages', 'mailFolders/inbox/messages')))",
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Graph_search_messages": {
               "type": "OpenApiConnection",
+              "runAfter": {
+                "Compose_search_messages_route": [
+                  "Succeeded"
+                ]
+              },
               "inputs": {
                 "parameters": {
-                  "Uri": "@concat(\r\n  'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?$search=',\r\n  uriComponent(\r\n    concat(\r\n      '\"',\r\n      triggerBody()?['args']?['query'],\r\n      '\"'\r\n    )\r\n  ),\r\n  '&$select=id,subject,from,receivedDateTime,isRead,importance,hasAttachments,bodyPreview&$top=',\r\n  string(coalesce(triggerBody()?['args']?['top'], 20))\r\n)",
+                  "Uri": "@concat('https://graph.microsoft.com/v1.0/me/', outputs('Compose_search_messages_route'), '?$search=', uriComponent(concat('\"', trim(body('Validate_search_messages_args')?['query']), '\"')), '&$top=', string(body('Validate_search_messages_args')?['top']), '&$select=id,subject,from,receivedDateTime,sentDateTime,parentFolderId,conversationId,hasAttachments,importance,isRead,bodyPreview')",
                   "Method": "GET",
                   "CustomHeader1": "Prefer: IdType=\"ImmutableId\"",
                   "ContentType": "application/json"
@@ -203,23 +1135,78 @@
                   "connectionName": "shared_office365",
                   "operationId": "HttpRequest"
                 },
-                "authentication": "@parameters('$authentication')"
+                "authentication": "@parameters('$authentication')",
+                "retryPolicy": {
+                  "type": "none"
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs",
+                    "outputs"
+                  ]
+                }
               }
             },
-            "応答_2": {
+            "Error_Graph_search_messages": {
+              "type": "Response",
+              "kind": "Http",
               "runAfter": {
-                "HTTP_要求を送信します_2": [
+                "Graph_search_messages": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 502,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "UPSTREAM_ERROR",
+                    "message": "The upstream read could not be completed."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Respond_search_messages": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Graph_search_messages": [
                   "Succeeded"
                 ]
               },
-              "type": "Response",
-              "kind": "Http",
               "inputs": {
                 "statusCode": 200,
                 "headers": {
-                  "Content-Type": "application/json"
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
                 },
-                "body": "@addProperty(\r\n  addProperty(\r\n    addProperty(\r\n      addProperty(\r\n        json('{}'),\r\n        'ok',\r\n        true\r\n      ),\r\n      'requestId',\r\n      triggerBody()?['requestId']\r\n    ),\r\n    'operation',\r\n    triggerBody()?['operation']\r\n  ),\r\n  'data',\r\n  body('HTTP_要求を送信します_2')\r\n)"
+                "body": {
+                  "ok": true,
+                  "requestId": "@triggerBody()?['requestId']",
+                  "operation": "@triggerBody()?['operation']",
+                  "data": "@body('Graph_search_messages')"
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
               }
             }
           }
@@ -1727,6 +2714,3542 @@
               },
               "runAfter": {
                 "Validate_attachment_metadata": [
+                  "Succeeded"
+                ]
+              }
+            }
+          }
+        },
+        "list_mail_folders": {
+          "case": "list_mail_folders",
+          "actions": {
+            "Validate_list_mail_folders_request": {
+              "type": "ParseJson",
+              "runAfter": {},
+              "inputs": {
+                "content": "@triggerBody()",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "operation": {
+                      "type": "string",
+                      "enum": [
+                        "list_mail_folders"
+                      ]
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 36,
+                      "maxLength": 36
+                    },
+                    "args": {
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "operation",
+                    "requestId",
+                    "args"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_list_mail_folders_request": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_list_mail_folders_request": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "The request envelope is invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_list_mail_folders_request_format": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_list_mail_folders_request": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@and(equals(length(toLower(replace(body('Validate_list_mail_folders_request')?['requestId'], '-', ''))), 32), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(replace(body('Validate_list_mail_folders_request')?['requestId'], '-', '')), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), 'a', ''), 'b', ''), 'c', ''), 'd', ''), 'e', ''), 'f', ''), ''), equals(substring(body('Validate_list_mail_folders_request')?['requestId'], 8, 1), '-'), equals(substring(body('Validate_list_mail_folders_request')?['requestId'], 13, 1), '-'), equals(substring(body('Validate_list_mail_folders_request')?['requestId'], 18, 1), '-'), equals(substring(body('Validate_list_mail_folders_request')?['requestId'], 23, 1), '-'), equals(substring(body('Validate_list_mail_folders_request')?['requestId'], 14, 1), '4'), contains('89ab', toLower(substring(body('Validate_list_mail_folders_request')?['requestId'], 19, 1))))",
+                "schema": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_list_mail_folders_request_format": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_list_mail_folders_request_format": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "The request envelope is invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_list_mail_folders_args": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_list_mail_folders_request_format": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@body('Validate_list_mail_folders_request')?['args']",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "top": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 50
+                    }
+                  },
+                  "required": [
+                    "top"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_list_mail_folders_args": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_list_mail_folders_args": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_list_mail_folders_controls": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_list_mail_folders_args": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@true",
+                "schema": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_list_mail_folders_controls": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_list_mail_folders_controls": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Graph_list_mail_folders": {
+              "type": "OpenApiConnection",
+              "runAfter": {
+                "Validate_list_mail_folders_controls": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "parameters": {
+                  "Uri": "@concat('https://graph.microsoft.com/v1.0/me/mailFolders?$top=', string(body('Validate_list_mail_folders_args')?['top']), '&$select=id,displayName,parentFolderId,childFolderCount,totalItemCount,unreadItemCount')",
+                  "Method": "GET",
+                  "CustomHeader1": "Prefer: IdType=\"ImmutableId\"",
+                  "ContentType": "application/json"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                  "connectionName": "shared_office365",
+                  "operationId": "HttpRequest"
+                },
+                "authentication": "@parameters('$authentication')",
+                "retryPolicy": {
+                  "type": "none"
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs",
+                    "outputs"
+                  ]
+                }
+              }
+            },
+            "Error_Graph_list_mail_folders": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Graph_list_mail_folders": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 502,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "UPSTREAM_ERROR",
+                    "message": "The upstream read could not be completed."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Respond_list_mail_folders": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Graph_list_mail_folders": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "statusCode": 200,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": true,
+                  "requestId": "@triggerBody()?['requestId']",
+                  "operation": "@triggerBody()?['operation']",
+                  "data": "@body('Graph_list_mail_folders')"
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "get_conversation": {
+          "case": "get_conversation",
+          "actions": {
+            "Validate_get_conversation_request": {
+              "type": "ParseJson",
+              "runAfter": {},
+              "inputs": {
+                "content": "@triggerBody()",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "operation": {
+                      "type": "string",
+                      "enum": [
+                        "get_conversation"
+                      ]
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 36,
+                      "maxLength": 36
+                    },
+                    "args": {
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "operation",
+                    "requestId",
+                    "args"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_get_conversation_request": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_get_conversation_request": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "The request envelope is invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_get_conversation_request_format": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_get_conversation_request": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@and(equals(length(toLower(replace(body('Validate_get_conversation_request')?['requestId'], '-', ''))), 32), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(replace(body('Validate_get_conversation_request')?['requestId'], '-', '')), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), 'a', ''), 'b', ''), 'c', ''), 'd', ''), 'e', ''), 'f', ''), ''), equals(substring(body('Validate_get_conversation_request')?['requestId'], 8, 1), '-'), equals(substring(body('Validate_get_conversation_request')?['requestId'], 13, 1), '-'), equals(substring(body('Validate_get_conversation_request')?['requestId'], 18, 1), '-'), equals(substring(body('Validate_get_conversation_request')?['requestId'], 23, 1), '-'), equals(substring(body('Validate_get_conversation_request')?['requestId'], 14, 1), '4'), contains('89ab', toLower(substring(body('Validate_get_conversation_request')?['requestId'], 19, 1))))",
+                "schema": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_get_conversation_request_format": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_get_conversation_request_format": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "The request envelope is invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_get_conversation_args": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_get_conversation_request_format": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@body('Validate_get_conversation_request')?['args']",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "conversationId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048
+                    },
+                    "top": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 50
+                    },
+                    "skip": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 10000
+                    }
+                  },
+                  "required": [
+                    "conversationId",
+                    "top"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_get_conversation_args": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_get_conversation_args": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_get_conversation_controls": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_get_conversation_args": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@and(not(equals(coalesce(body('Validate_get_conversation_args')?['conversationId'], 'unused'), '.')), not(equals(coalesce(body('Validate_get_conversation_args')?['conversationId'], 'unused'), '..')), equals(length(uriComponent(coalesce(body('Validate_get_conversation_args')?['conversationId'], 'unused'))), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(coalesce(body('Validate_get_conversation_args')?['conversationId'], 'unused')), '%0', ''), '%1', ''), '%20', ''), '%7F', ''), '%C2%85', ''), '%C2%A0', ''), '%E1%9A%80', ''), '%E2%80%80', ''), '%E2%80%81', ''), '%E2%80%82', ''), '%E2%80%83', ''), '%E2%80%84', ''), '%E2%80%85', ''), '%E2%80%86', ''), '%E2%80%87', ''), '%E2%80%88', ''), '%E2%80%89', ''), '%E2%80%8A', ''), '%E2%80%A8', ''), '%E2%80%A9', ''), '%E2%80%AF', ''), '%E2%81%9F', ''), '%E3%80%80', ''), '%EF%BB%BF', ''))))",
+                "schema": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_get_conversation_controls": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_get_conversation_controls": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Graph_get_conversation": {
+              "type": "OpenApiConnection",
+              "runAfter": {
+                "Validate_get_conversation_controls": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "parameters": {
+                  "Uri": "@concat('https://graph.microsoft.com/v1.0/me/messages?$top=', string(body('Validate_get_conversation_args')?['top']), '&$skip=', string(coalesce(body('Validate_get_conversation_args')?['skip'], 0)), '&$select=id,subject,from,receivedDateTime,sentDateTime,parentFolderId,conversationId,hasAttachments,importance,isRead,bodyPreview,toRecipients,ccRecipients,body&$filter=', uriComponent(concat('conversationId eq ''', replace(body('Validate_get_conversation_args')?['conversationId'], '''', ''''''), '''')))",
+                  "Method": "GET",
+                  "CustomHeader1": "Prefer: IdType=\"ImmutableId\"",
+                  "ContentType": "application/json",
+                  "CustomHeader2": "Prefer: outlook.body-content-type=\"text\""
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                  "connectionName": "shared_office365",
+                  "operationId": "HttpRequest"
+                },
+                "authentication": "@parameters('$authentication')",
+                "retryPolicy": {
+                  "type": "none"
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs",
+                    "outputs"
+                  ]
+                }
+              }
+            },
+            "Error_Graph_get_conversation": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Graph_get_conversation": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 502,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "UPSTREAM_ERROR",
+                    "message": "The upstream read could not be completed."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Respond_get_conversation": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Graph_get_conversation": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "statusCode": 200,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": true,
+                  "requestId": "@triggerBody()?['requestId']",
+                  "operation": "@triggerBody()?['operation']",
+                  "data": "@body('Graph_get_conversation')"
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "onedrive_search_files": {
+          "case": "onedrive_search_files",
+          "actions": {
+            "Validate_onedrive_search_files_request": {
+              "type": "ParseJson",
+              "runAfter": {},
+              "inputs": {
+                "content": "@triggerBody()",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "operation": {
+                      "type": "string",
+                      "enum": [
+                        "onedrive_search_files"
+                      ]
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 36,
+                      "maxLength": 36
+                    },
+                    "args": {
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "operation",
+                    "requestId",
+                    "args"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_onedrive_search_files_request": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_onedrive_search_files_request": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "The request envelope is invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_onedrive_search_files_request_format": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_onedrive_search_files_request": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@and(equals(length(toLower(replace(body('Validate_onedrive_search_files_request')?['requestId'], '-', ''))), 32), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(replace(body('Validate_onedrive_search_files_request')?['requestId'], '-', '')), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), 'a', ''), 'b', ''), 'c', ''), 'd', ''), 'e', ''), 'f', ''), ''), equals(substring(body('Validate_onedrive_search_files_request')?['requestId'], 8, 1), '-'), equals(substring(body('Validate_onedrive_search_files_request')?['requestId'], 13, 1), '-'), equals(substring(body('Validate_onedrive_search_files_request')?['requestId'], 18, 1), '-'), equals(substring(body('Validate_onedrive_search_files_request')?['requestId'], 23, 1), '-'), equals(substring(body('Validate_onedrive_search_files_request')?['requestId'], 14, 1), '4'), contains('89ab', toLower(substring(body('Validate_onedrive_search_files_request')?['requestId'], 19, 1))))",
+                "schema": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_onedrive_search_files_request_format": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_onedrive_search_files_request_format": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "The request envelope is invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_onedrive_search_files_args": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_onedrive_search_files_request_format": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@body('Validate_onedrive_search_files_request')?['args']",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "query": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 512
+                    },
+                    "top": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 100
+                    }
+                  },
+                  "required": [
+                    "query",
+                    "top"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_onedrive_search_files_args": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_onedrive_search_files_args": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_onedrive_search_files_controls": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_onedrive_search_files_args": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@and(not(empty(trim(body('Validate_onedrive_search_files_args')?['query']))), lessOrEquals(length(trim(body('Validate_onedrive_search_files_args')?['query'])), 512))",
+                "schema": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_onedrive_search_files_controls": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_onedrive_search_files_controls": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Check_onedrive_search_binding": {
+              "type": "If",
+              "expression": {
+                "equals": [
+                  "@and(not(empty(parameters('OneDriveSearchRootId'))), not(empty(parameters('OneDriveSearchMode'))))",
+                  true
+                ]
+              },
+              "actions": {
+                "OneDrive_find_files": {
+                  "type": "OpenApiConnection",
+                  "runAfter": {},
+                  "inputs": {
+                    "parameters": {
+                      "query": "@trim(body('Validate_onedrive_search_files_args')?['query'])",
+                      "id": "@parameters('OneDriveSearchRootId')",
+                      "findMode": "@parameters('OneDriveSearchMode')",
+                      "maxFileCount": "@body('Validate_onedrive_search_files_args')?['top']"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_onedriveforbusiness",
+                      "connectionName": "shared_onedriveforbusiness",
+                      "operationId": "FindFiles"
+                    },
+                    "authentication": "@parameters('$authentication')",
+                    "retryPolicy": {
+                      "type": "none"
+                    }
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs",
+                        "outputs"
+                      ]
+                    }
+                  }
+                },
+                "Error_OneDrive_find_files": {
+                  "type": "Response",
+                  "kind": "Http",
+                  "runAfter": {
+                    "OneDrive_find_files": [
+                      "Failed",
+                      "TimedOut"
+                    ]
+                  },
+                  "inputs": {
+                    "statusCode": 502,
+                    "headers": {
+                      "Content-Type": "application/json",
+                      "Cache-Control": "no-store"
+                    },
+                    "body": {
+                      "ok": false,
+                      "error": {
+                        "code": "UPSTREAM_ERROR",
+                        "message": "The upstream read could not be completed."
+                      }
+                    }
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs"
+                      ]
+                    }
+                  }
+                },
+                "Select_onedrive_search_files": {
+                  "type": "Select",
+                  "runAfter": {
+                    "OneDrive_find_files": [
+                      "Succeeded"
+                    ]
+                  },
+                  "inputs": {
+                    "from": "@take(body('OneDrive_find_files'), body('Validate_onedrive_search_files_args')?['top'])",
+                    "select": {
+                      "Id": "@item()?['Id']",
+                      "Name": "@item()?['Name']",
+                      "Size": "@item()?['Size']",
+                      "MediaType": "@item()?['MediaType']",
+                      "IsFolder": "@item()?['IsFolder']",
+                      "LastModified": "@item()?['LastModified']",
+                      "ETag": "@item()?['ETag']"
+                    }
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs",
+                        "outputs"
+                      ]
+                    }
+                  }
+                },
+                "Error_Select_onedrive_search_files": {
+                  "type": "Response",
+                  "kind": "Http",
+                  "runAfter": {
+                    "Select_onedrive_search_files": [
+                      "Failed",
+                      "TimedOut"
+                    ]
+                  },
+                  "inputs": {
+                    "statusCode": 502,
+                    "headers": {
+                      "Content-Type": "application/json",
+                      "Cache-Control": "no-store"
+                    },
+                    "body": {
+                      "ok": false,
+                      "error": {
+                        "code": "INVALID_ONEDRIVE_METADATA",
+                        "message": "The upstream OneDrive metadata is invalid."
+                      }
+                    }
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs"
+                      ]
+                    }
+                  }
+                },
+                "Validate_onedrive_search_files": {
+                  "type": "ParseJson",
+                  "runAfter": {
+                    "Select_onedrive_search_files": [
+                      "Succeeded"
+                    ]
+                  },
+                  "inputs": {
+                    "content": "@body('Select_onedrive_search_files')",
+                    "schema": {
+                      "type": "array",
+                      "maxItems": 100,
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "Id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2048
+                          },
+                          "Name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 512
+                          },
+                          "Size": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "MediaType": {
+                            "type": "string",
+                            "maxLength": 256
+                          },
+                          "IsFolder": {
+                            "type": "boolean"
+                          },
+                          "LastModified": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "maxLength": 2048
+                          },
+                          "ETag": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "maxLength": 2048
+                          },
+                          "Path": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "maxLength": 2048
+                          },
+                          "NameNoExt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "maxLength": 2048
+                          },
+                          "DisplayName": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "maxLength": 2048
+                          },
+                          "FileLocator": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "maxLength": 2048
+                          }
+                        },
+                        "required": [
+                          "Id",
+                          "Name",
+                          "Size",
+                          "MediaType",
+                          "IsFolder"
+                        ]
+                      }
+                    }
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs"
+                      ]
+                    }
+                  }
+                },
+                "Error_Validate_onedrive_search_files": {
+                  "type": "Response",
+                  "kind": "Http",
+                  "runAfter": {
+                    "Validate_onedrive_search_files": [
+                      "Failed",
+                      "TimedOut"
+                    ]
+                  },
+                  "inputs": {
+                    "statusCode": 502,
+                    "headers": {
+                      "Content-Type": "application/json",
+                      "Cache-Control": "no-store"
+                    },
+                    "body": {
+                      "ok": false,
+                      "error": {
+                        "code": "INVALID_ONEDRIVE_METADATA",
+                        "message": "The upstream OneDrive metadata is invalid."
+                      }
+                    }
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs"
+                      ]
+                    }
+                  }
+                },
+                "Respond_onedrive_search_files": {
+                  "type": "Response",
+                  "kind": "Http",
+                  "runAfter": {
+                    "Validate_onedrive_search_files": [
+                      "Succeeded"
+                    ]
+                  },
+                  "inputs": {
+                    "statusCode": 200,
+                    "headers": {
+                      "Content-Type": "application/json",
+                      "Cache-Control": "no-store"
+                    },
+                    "body": {
+                      "ok": true,
+                      "requestId": "@triggerBody()?['requestId']",
+                      "operation": "@triggerBody()?['operation']",
+                      "data": {
+                        "value": "@body('Validate_onedrive_search_files')",
+                        "truncated": "@greaterOrEquals(length(body('OneDrive_find_files')), body('Validate_onedrive_search_files_args')?['top'])"
+                      }
+                    }
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs"
+                      ]
+                    }
+                  }
+                }
+              },
+              "else": {
+                "actions": {
+                  "Reject_onedrive_search_binding": {
+                    "type": "Response",
+                    "kind": "Http",
+                    "runAfter": {},
+                    "inputs": {
+                      "statusCode": 503,
+                      "headers": {
+                        "Content-Type": "application/json",
+                        "Cache-Control": "no-store"
+                      },
+                      "body": {
+                        "ok": false,
+                        "error": {
+                          "code": "ONEDRIVE_SEARCH_NOT_CONFIGURED",
+                          "message": "The OneDrive search binding must be configured before use."
+                        }
+                      }
+                    },
+                    "runtimeConfiguration": {
+                      "secureData": {
+                        "properties": [
+                          "inputs"
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              "runAfter": {
+                "Validate_onedrive_search_files_controls": [
+                  "Succeeded"
+                ]
+              }
+            }
+          }
+        },
+        "onedrive_list_folder": {
+          "case": "onedrive_list_folder",
+          "actions": {
+            "Validate_onedrive_list_folder_request": {
+              "type": "ParseJson",
+              "runAfter": {},
+              "inputs": {
+                "content": "@triggerBody()",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "operation": {
+                      "type": "string",
+                      "enum": [
+                        "onedrive_list_folder"
+                      ]
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 36,
+                      "maxLength": 36
+                    },
+                    "args": {
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "operation",
+                    "requestId",
+                    "args"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_onedrive_list_folder_request": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_onedrive_list_folder_request": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "The request envelope is invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_onedrive_list_folder_request_format": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_onedrive_list_folder_request": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@and(equals(length(toLower(replace(body('Validate_onedrive_list_folder_request')?['requestId'], '-', ''))), 32), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(replace(body('Validate_onedrive_list_folder_request')?['requestId'], '-', '')), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), 'a', ''), 'b', ''), 'c', ''), 'd', ''), 'e', ''), 'f', ''), ''), equals(substring(body('Validate_onedrive_list_folder_request')?['requestId'], 8, 1), '-'), equals(substring(body('Validate_onedrive_list_folder_request')?['requestId'], 13, 1), '-'), equals(substring(body('Validate_onedrive_list_folder_request')?['requestId'], 18, 1), '-'), equals(substring(body('Validate_onedrive_list_folder_request')?['requestId'], 23, 1), '-'), equals(substring(body('Validate_onedrive_list_folder_request')?['requestId'], 14, 1), '4'), contains('89ab', toLower(substring(body('Validate_onedrive_list_folder_request')?['requestId'], 19, 1))))",
+                "schema": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_onedrive_list_folder_request_format": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_onedrive_list_folder_request_format": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "The request envelope is invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_onedrive_list_folder_args": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_onedrive_list_folder_request_format": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@body('Validate_onedrive_list_folder_request')?['args']",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "folderId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048
+                    },
+                    "top": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 100
+                    }
+                  },
+                  "required": [
+                    "top"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_onedrive_list_folder_args": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_onedrive_list_folder_args": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_onedrive_list_folder_controls": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_onedrive_list_folder_args": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@and(not(equals(coalesce(body('Validate_onedrive_list_folder_args')?['folderId'], 'unused'), '.')), not(equals(coalesce(body('Validate_onedrive_list_folder_args')?['folderId'], 'unused'), '..')), equals(length(uriComponent(coalesce(body('Validate_onedrive_list_folder_args')?['folderId'], 'unused'))), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(coalesce(body('Validate_onedrive_list_folder_args')?['folderId'], 'unused')), '%0', ''), '%1', ''), '%20', ''), '%7F', ''), '%C2%85', ''), '%C2%A0', ''), '%E1%9A%80', ''), '%E2%80%80', ''), '%E2%80%81', ''), '%E2%80%82', ''), '%E2%80%83', ''), '%E2%80%84', ''), '%E2%80%85', ''), '%E2%80%86', ''), '%E2%80%87', ''), '%E2%80%88', ''), '%E2%80%89', ''), '%E2%80%8A', ''), '%E2%80%A8', ''), '%E2%80%A9', ''), '%E2%80%AF', ''), '%E2%81%9F', ''), '%E3%80%80', ''), '%EF%BB%BF', ''))))",
+                "schema": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_onedrive_list_folder_controls": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_onedrive_list_folder_controls": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Route_onedrive_list_folder": {
+              "type": "If",
+              "expression": {
+                "equals": [
+                  "@empty(body('Validate_onedrive_list_folder_args')?['folderId'])",
+                  true
+                ]
+              },
+              "actions": {
+                "OneDrive_list_root": {
+                  "type": "OpenApiConnection",
+                  "runAfter": {},
+                  "inputs": {
+                    "parameters": {},
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_onedriveforbusiness",
+                      "connectionName": "shared_onedriveforbusiness",
+                      "operationId": "ListRootFolder"
+                    },
+                    "authentication": "@parameters('$authentication')",
+                    "retryPolicy": {
+                      "type": "none"
+                    }
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs",
+                        "outputs"
+                      ]
+                    }
+                  }
+                },
+                "Error_OneDrive_list_root": {
+                  "type": "Response",
+                  "kind": "Http",
+                  "runAfter": {
+                    "OneDrive_list_root": [
+                      "Failed",
+                      "TimedOut"
+                    ]
+                  },
+                  "inputs": {
+                    "statusCode": 502,
+                    "headers": {
+                      "Content-Type": "application/json",
+                      "Cache-Control": "no-store"
+                    },
+                    "body": {
+                      "ok": false,
+                      "error": {
+                        "code": "UPSTREAM_ERROR",
+                        "message": "The upstream read could not be completed."
+                      }
+                    }
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs"
+                      ]
+                    }
+                  }
+                },
+                "Select_onedrive_root_folder": {
+                  "type": "Select",
+                  "runAfter": {
+                    "OneDrive_list_root": [
+                      "Succeeded"
+                    ]
+                  },
+                  "inputs": {
+                    "from": "@take(body('OneDrive_list_root'), body('Validate_onedrive_list_folder_args')?['top'])",
+                    "select": {
+                      "Id": "@item()?['Id']",
+                      "Name": "@item()?['Name']",
+                      "Size": "@item()?['Size']",
+                      "MediaType": "@item()?['MediaType']",
+                      "IsFolder": "@item()?['IsFolder']",
+                      "LastModified": "@item()?['LastModified']",
+                      "ETag": "@item()?['ETag']"
+                    }
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs",
+                        "outputs"
+                      ]
+                    }
+                  }
+                },
+                "Error_Select_onedrive_root_folder": {
+                  "type": "Response",
+                  "kind": "Http",
+                  "runAfter": {
+                    "Select_onedrive_root_folder": [
+                      "Failed",
+                      "TimedOut"
+                    ]
+                  },
+                  "inputs": {
+                    "statusCode": 502,
+                    "headers": {
+                      "Content-Type": "application/json",
+                      "Cache-Control": "no-store"
+                    },
+                    "body": {
+                      "ok": false,
+                      "error": {
+                        "code": "INVALID_ONEDRIVE_METADATA",
+                        "message": "The upstream OneDrive metadata is invalid."
+                      }
+                    }
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs"
+                      ]
+                    }
+                  }
+                },
+                "Validate_onedrive_root_folder": {
+                  "type": "ParseJson",
+                  "runAfter": {
+                    "Select_onedrive_root_folder": [
+                      "Succeeded"
+                    ]
+                  },
+                  "inputs": {
+                    "content": "@body('Select_onedrive_root_folder')",
+                    "schema": {
+                      "type": "array",
+                      "maxItems": 100,
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "Id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2048
+                          },
+                          "Name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 512
+                          },
+                          "Size": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "MediaType": {
+                            "type": "string",
+                            "maxLength": 256
+                          },
+                          "IsFolder": {
+                            "type": "boolean"
+                          },
+                          "LastModified": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "maxLength": 2048
+                          },
+                          "ETag": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "maxLength": 2048
+                          },
+                          "Path": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "maxLength": 2048
+                          },
+                          "NameNoExt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "maxLength": 2048
+                          },
+                          "DisplayName": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "maxLength": 2048
+                          },
+                          "FileLocator": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "maxLength": 2048
+                          }
+                        },
+                        "required": [
+                          "Id",
+                          "Name",
+                          "Size",
+                          "MediaType",
+                          "IsFolder"
+                        ]
+                      }
+                    }
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs"
+                      ]
+                    }
+                  }
+                },
+                "Error_Validate_onedrive_root_folder": {
+                  "type": "Response",
+                  "kind": "Http",
+                  "runAfter": {
+                    "Validate_onedrive_root_folder": [
+                      "Failed",
+                      "TimedOut"
+                    ]
+                  },
+                  "inputs": {
+                    "statusCode": 502,
+                    "headers": {
+                      "Content-Type": "application/json",
+                      "Cache-Control": "no-store"
+                    },
+                    "body": {
+                      "ok": false,
+                      "error": {
+                        "code": "INVALID_ONEDRIVE_METADATA",
+                        "message": "The upstream OneDrive metadata is invalid."
+                      }
+                    }
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs"
+                      ]
+                    }
+                  }
+                },
+                "Respond_onedrive_list_root": {
+                  "type": "Response",
+                  "kind": "Http",
+                  "runAfter": {
+                    "Validate_onedrive_root_folder": [
+                      "Succeeded"
+                    ]
+                  },
+                  "inputs": {
+                    "statusCode": 200,
+                    "headers": {
+                      "Content-Type": "application/json",
+                      "Cache-Control": "no-store"
+                    },
+                    "body": {
+                      "ok": true,
+                      "requestId": "@triggerBody()?['requestId']",
+                      "operation": "@triggerBody()?['operation']",
+                      "data": {
+                        "value": "@body('Validate_onedrive_root_folder')",
+                        "truncated": "@greater(length(body('OneDrive_list_root')), body('Validate_onedrive_list_folder_args')?['top'])"
+                      }
+                    }
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs"
+                      ]
+                    }
+                  }
+                }
+              },
+              "else": {
+                "actions": {
+                  "OneDrive_list_folder_v2": {
+                    "type": "OpenApiConnection",
+                    "runAfter": {},
+                    "inputs": {
+                      "parameters": {
+                        "id": "@body('Validate_onedrive_list_folder_args')?['folderId']"
+                      },
+                      "host": {
+                        "apiId": "/providers/Microsoft.PowerApps/apis/shared_onedriveforbusiness",
+                        "connectionName": "shared_onedriveforbusiness",
+                        "operationId": "ListFolderV2"
+                      },
+                      "authentication": "@parameters('$authentication')",
+                      "retryPolicy": {
+                        "type": "none"
+                      }
+                    },
+                    "runtimeConfiguration": {
+                      "secureData": {
+                        "properties": [
+                          "inputs",
+                          "outputs"
+                        ]
+                      }
+                    }
+                  },
+                  "Error_OneDrive_list_folder_v2": {
+                    "type": "Response",
+                    "kind": "Http",
+                    "runAfter": {
+                      "OneDrive_list_folder_v2": [
+                        "Failed",
+                        "TimedOut"
+                      ]
+                    },
+                    "inputs": {
+                      "statusCode": 502,
+                      "headers": {
+                        "Content-Type": "application/json",
+                        "Cache-Control": "no-store"
+                      },
+                      "body": {
+                        "ok": false,
+                        "error": {
+                          "code": "UPSTREAM_ERROR",
+                          "message": "The upstream read could not be completed."
+                        }
+                      }
+                    },
+                    "runtimeConfiguration": {
+                      "secureData": {
+                        "properties": [
+                          "inputs"
+                        ]
+                      }
+                    }
+                  },
+                  "Select_onedrive_list_folder": {
+                    "type": "Select",
+                    "runAfter": {
+                      "OneDrive_list_folder_v2": [
+                        "Succeeded"
+                      ]
+                    },
+                    "inputs": {
+                      "from": "@take(body('OneDrive_list_folder_v2')?['value'], body('Validate_onedrive_list_folder_args')?['top'])",
+                      "select": {
+                        "Id": "@item()?['Id']",
+                        "Name": "@item()?['Name']",
+                        "Size": "@item()?['Size']",
+                        "MediaType": "@item()?['MediaType']",
+                        "IsFolder": "@item()?['IsFolder']",
+                        "LastModified": "@item()?['LastModified']",
+                        "ETag": "@item()?['ETag']"
+                      }
+                    },
+                    "runtimeConfiguration": {
+                      "secureData": {
+                        "properties": [
+                          "inputs",
+                          "outputs"
+                        ]
+                      }
+                    }
+                  },
+                  "Error_Select_onedrive_list_folder": {
+                    "type": "Response",
+                    "kind": "Http",
+                    "runAfter": {
+                      "Select_onedrive_list_folder": [
+                        "Failed",
+                        "TimedOut"
+                      ]
+                    },
+                    "inputs": {
+                      "statusCode": 502,
+                      "headers": {
+                        "Content-Type": "application/json",
+                        "Cache-Control": "no-store"
+                      },
+                      "body": {
+                        "ok": false,
+                        "error": {
+                          "code": "INVALID_ONEDRIVE_METADATA",
+                          "message": "The upstream OneDrive metadata is invalid."
+                        }
+                      }
+                    },
+                    "runtimeConfiguration": {
+                      "secureData": {
+                        "properties": [
+                          "inputs"
+                        ]
+                      }
+                    }
+                  },
+                  "Validate_onedrive_list_folder": {
+                    "type": "ParseJson",
+                    "runAfter": {
+                      "Select_onedrive_list_folder": [
+                        "Succeeded"
+                      ]
+                    },
+                    "inputs": {
+                      "content": "@body('Select_onedrive_list_folder')",
+                      "schema": {
+                        "type": "array",
+                        "maxItems": 100,
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "Id": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2048
+                            },
+                            "Name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 512
+                            },
+                            "Size": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "MediaType": {
+                              "type": "string",
+                              "maxLength": 256
+                            },
+                            "IsFolder": {
+                              "type": "boolean"
+                            },
+                            "LastModified": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "maxLength": 2048
+                            },
+                            "ETag": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "maxLength": 2048
+                            },
+                            "Path": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "maxLength": 2048
+                            },
+                            "NameNoExt": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "maxLength": 2048
+                            },
+                            "DisplayName": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "maxLength": 2048
+                            },
+                            "FileLocator": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "maxLength": 2048
+                            }
+                          },
+                          "required": [
+                            "Id",
+                            "Name",
+                            "Size",
+                            "MediaType",
+                            "IsFolder"
+                          ]
+                        }
+                      }
+                    },
+                    "runtimeConfiguration": {
+                      "secureData": {
+                        "properties": [
+                          "inputs"
+                        ]
+                      }
+                    }
+                  },
+                  "Error_Validate_onedrive_list_folder": {
+                    "type": "Response",
+                    "kind": "Http",
+                    "runAfter": {
+                      "Validate_onedrive_list_folder": [
+                        "Failed",
+                        "TimedOut"
+                      ]
+                    },
+                    "inputs": {
+                      "statusCode": 502,
+                      "headers": {
+                        "Content-Type": "application/json",
+                        "Cache-Control": "no-store"
+                      },
+                      "body": {
+                        "ok": false,
+                        "error": {
+                          "code": "INVALID_ONEDRIVE_METADATA",
+                          "message": "The upstream OneDrive metadata is invalid."
+                        }
+                      }
+                    },
+                    "runtimeConfiguration": {
+                      "secureData": {
+                        "properties": [
+                          "inputs"
+                        ]
+                      }
+                    }
+                  },
+                  "Respond_onedrive_list_folder": {
+                    "type": "Response",
+                    "kind": "Http",
+                    "runAfter": {
+                      "Validate_onedrive_list_folder": [
+                        "Succeeded"
+                      ]
+                    },
+                    "inputs": {
+                      "statusCode": 200,
+                      "headers": {
+                        "Content-Type": "application/json",
+                        "Cache-Control": "no-store"
+                      },
+                      "body": {
+                        "ok": true,
+                        "requestId": "@triggerBody()?['requestId']",
+                        "operation": "@triggerBody()?['operation']",
+                        "data": {
+                          "value": "@body('Validate_onedrive_list_folder')",
+                          "truncated": "@or(greater(length(body('OneDrive_list_folder_v2')?['value']), body('Validate_onedrive_list_folder_args')?['top']), not(empty(body('OneDrive_list_folder_v2')?['nextLink'])))"
+                        }
+                      }
+                    },
+                    "runtimeConfiguration": {
+                      "secureData": {
+                        "properties": [
+                          "inputs"
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              "runAfter": {
+                "Validate_onedrive_list_folder_controls": [
+                  "Succeeded"
+                ]
+              }
+            }
+          }
+        },
+        "onedrive_get_metadata": {
+          "case": "onedrive_get_metadata",
+          "actions": {
+            "Validate_onedrive_get_metadata_request": {
+              "type": "ParseJson",
+              "runAfter": {},
+              "inputs": {
+                "content": "@triggerBody()",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "operation": {
+                      "type": "string",
+                      "enum": [
+                        "onedrive_get_metadata"
+                      ]
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 36,
+                      "maxLength": 36
+                    },
+                    "args": {
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "operation",
+                    "requestId",
+                    "args"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_onedrive_get_metadata_request": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_onedrive_get_metadata_request": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "The request envelope is invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_onedrive_get_metadata_request_format": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_onedrive_get_metadata_request": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@and(equals(length(toLower(replace(body('Validate_onedrive_get_metadata_request')?['requestId'], '-', ''))), 32), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(replace(body('Validate_onedrive_get_metadata_request')?['requestId'], '-', '')), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), 'a', ''), 'b', ''), 'c', ''), 'd', ''), 'e', ''), 'f', ''), ''), equals(substring(body('Validate_onedrive_get_metadata_request')?['requestId'], 8, 1), '-'), equals(substring(body('Validate_onedrive_get_metadata_request')?['requestId'], 13, 1), '-'), equals(substring(body('Validate_onedrive_get_metadata_request')?['requestId'], 18, 1), '-'), equals(substring(body('Validate_onedrive_get_metadata_request')?['requestId'], 23, 1), '-'), equals(substring(body('Validate_onedrive_get_metadata_request')?['requestId'], 14, 1), '4'), contains('89ab', toLower(substring(body('Validate_onedrive_get_metadata_request')?['requestId'], 19, 1))))",
+                "schema": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_onedrive_get_metadata_request_format": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_onedrive_get_metadata_request_format": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "The request envelope is invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_onedrive_get_metadata_args": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_onedrive_get_metadata_request_format": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@body('Validate_onedrive_get_metadata_request')?['args']",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "fileId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048
+                    }
+                  },
+                  "required": [
+                    "fileId"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_onedrive_get_metadata_args": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_onedrive_get_metadata_args": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_onedrive_get_metadata_controls": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_onedrive_get_metadata_args": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@and(not(equals(coalesce(body('Validate_onedrive_get_metadata_args')?['fileId'], 'unused'), '.')), not(equals(coalesce(body('Validate_onedrive_get_metadata_args')?['fileId'], 'unused'), '..')), equals(length(uriComponent(coalesce(body('Validate_onedrive_get_metadata_args')?['fileId'], 'unused'))), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(coalesce(body('Validate_onedrive_get_metadata_args')?['fileId'], 'unused')), '%0', ''), '%1', ''), '%20', ''), '%7F', ''), '%C2%85', ''), '%C2%A0', ''), '%E1%9A%80', ''), '%E2%80%80', ''), '%E2%80%81', ''), '%E2%80%82', ''), '%E2%80%83', ''), '%E2%80%84', ''), '%E2%80%85', ''), '%E2%80%86', ''), '%E2%80%87', ''), '%E2%80%88', ''), '%E2%80%89', ''), '%E2%80%8A', ''), '%E2%80%A8', ''), '%E2%80%A9', ''), '%E2%80%AF', ''), '%E2%81%9F', ''), '%E3%80%80', ''), '%EF%BB%BF', ''))))",
+                "schema": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_onedrive_get_metadata_controls": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_onedrive_get_metadata_controls": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "OneDrive_get_metadata": {
+              "type": "OpenApiConnection",
+              "runAfter": {
+                "Validate_onedrive_get_metadata_controls": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "parameters": {
+                  "id": "@body('Validate_onedrive_get_metadata_args')?['fileId']"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_onedriveforbusiness",
+                  "connectionName": "shared_onedriveforbusiness",
+                  "operationId": "GetFileMetadata"
+                },
+                "authentication": "@parameters('$authentication')",
+                "retryPolicy": {
+                  "type": "none"
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs",
+                    "outputs"
+                  ]
+                }
+              }
+            },
+            "Error_OneDrive_get_metadata": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "OneDrive_get_metadata": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 502,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "UPSTREAM_ERROR",
+                    "message": "The upstream read could not be completed."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_onedrive_metadata": {
+              "type": "ParseJson",
+              "runAfter": {
+                "OneDrive_get_metadata": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@body('OneDrive_get_metadata')",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "Id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048
+                    },
+                    "Name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 512
+                    },
+                    "Size": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "MediaType": {
+                      "type": "string",
+                      "maxLength": 256
+                    },
+                    "IsFolder": {
+                      "type": "boolean"
+                    },
+                    "LastModified": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "maxLength": 2048
+                    },
+                    "ETag": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "maxLength": 2048
+                    },
+                    "Path": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "maxLength": 2048
+                    },
+                    "NameNoExt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "maxLength": 2048
+                    },
+                    "DisplayName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "maxLength": 2048
+                    },
+                    "FileLocator": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "maxLength": 2048
+                    }
+                  },
+                  "required": [
+                    "Id",
+                    "Name",
+                    "Size",
+                    "MediaType",
+                    "IsFolder"
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_onedrive_metadata": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_onedrive_metadata": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 502,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ONEDRIVE_METADATA",
+                    "message": "The upstream OneDrive metadata is invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Check_onedrive_metadata_identity": {
+              "type": "If",
+              "expression": {
+                "equals": [
+                  "@body('Validate_onedrive_metadata')?['Id']",
+                  "@body('Validate_onedrive_get_metadata_args')?['fileId']"
+                ]
+              },
+              "actions": {
+                "Respond_onedrive_metadata": {
+                  "type": "Response",
+                  "kind": "Http",
+                  "runAfter": {},
+                  "inputs": {
+                    "statusCode": 200,
+                    "headers": {
+                      "Content-Type": "application/json",
+                      "Cache-Control": "no-store"
+                    },
+                    "body": {
+                      "ok": true,
+                      "requestId": "@triggerBody()?['requestId']",
+                      "operation": "@triggerBody()?['operation']",
+                      "data": {
+                        "Id": "@body('Validate_onedrive_metadata')?['Id']",
+                        "Name": "@body('Validate_onedrive_metadata')?['Name']",
+                        "Size": "@body('Validate_onedrive_metadata')?['Size']",
+                        "MediaType": "@body('Validate_onedrive_metadata')?['MediaType']",
+                        "IsFolder": "@body('Validate_onedrive_metadata')?['IsFolder']",
+                        "LastModified": "@body('Validate_onedrive_metadata')?['LastModified']",
+                        "ETag": "@body('Validate_onedrive_metadata')?['ETag']"
+                      }
+                    }
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs"
+                      ]
+                    }
+                  }
+                }
+              },
+              "else": {
+                "actions": {
+                  "Reject_onedrive_metadata": {
+                    "type": "Response",
+                    "kind": "Http",
+                    "runAfter": {},
+                    "inputs": {
+                      "statusCode": 502,
+                      "headers": {
+                        "Content-Type": "application/json",
+                        "Cache-Control": "no-store"
+                      },
+                      "body": {
+                        "ok": false,
+                        "error": {
+                          "code": "INVALID_ONEDRIVE_METADATA",
+                          "message": "The upstream OneDrive metadata is invalid."
+                        }
+                      }
+                    },
+                    "runtimeConfiguration": {
+                      "secureData": {
+                        "properties": [
+                          "inputs"
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              "runAfter": {
+                "Validate_onedrive_metadata": [
+                  "Succeeded"
+                ]
+              }
+            }
+          }
+        },
+        "onedrive_get_content": {
+          "case": "onedrive_get_content",
+          "actions": {
+            "Validate_onedrive_get_content_request": {
+              "type": "ParseJson",
+              "runAfter": {},
+              "inputs": {
+                "content": "@triggerBody()",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "operation": {
+                      "type": "string",
+                      "enum": [
+                        "onedrive_get_content"
+                      ]
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 36,
+                      "maxLength": 36
+                    },
+                    "args": {
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "operation",
+                    "requestId",
+                    "args"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_onedrive_get_content_request": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_onedrive_get_content_request": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "The request envelope is invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_onedrive_get_content_request_format": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_onedrive_get_content_request": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@and(equals(length(toLower(replace(body('Validate_onedrive_get_content_request')?['requestId'], '-', ''))), 32), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(replace(body('Validate_onedrive_get_content_request')?['requestId'], '-', '')), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), 'a', ''), 'b', ''), 'c', ''), 'd', ''), 'e', ''), 'f', ''), ''), equals(substring(body('Validate_onedrive_get_content_request')?['requestId'], 8, 1), '-'), equals(substring(body('Validate_onedrive_get_content_request')?['requestId'], 13, 1), '-'), equals(substring(body('Validate_onedrive_get_content_request')?['requestId'], 18, 1), '-'), equals(substring(body('Validate_onedrive_get_content_request')?['requestId'], 23, 1), '-'), equals(substring(body('Validate_onedrive_get_content_request')?['requestId'], 14, 1), '4'), contains('89ab', toLower(substring(body('Validate_onedrive_get_content_request')?['requestId'], 19, 1))))",
+                "schema": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_onedrive_get_content_request_format": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_onedrive_get_content_request_format": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "The request envelope is invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_onedrive_get_content_args": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_onedrive_get_content_request_format": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@body('Validate_onedrive_get_content_request')?['args']",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "fileId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048
+                    }
+                  },
+                  "required": [
+                    "fileId"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_onedrive_get_content_args": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_onedrive_get_content_args": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_onedrive_get_content_controls": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_onedrive_get_content_args": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@and(not(equals(coalesce(body('Validate_onedrive_get_content_args')?['fileId'], 'unused'), '.')), not(equals(coalesce(body('Validate_onedrive_get_content_args')?['fileId'], 'unused'), '..')), equals(length(uriComponent(coalesce(body('Validate_onedrive_get_content_args')?['fileId'], 'unused'))), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(coalesce(body('Validate_onedrive_get_content_args')?['fileId'], 'unused')), '%0', ''), '%1', ''), '%20', ''), '%7F', ''), '%C2%85', ''), '%C2%A0', ''), '%E1%9A%80', ''), '%E2%80%80', ''), '%E2%80%81', ''), '%E2%80%82', ''), '%E2%80%83', ''), '%E2%80%84', ''), '%E2%80%85', ''), '%E2%80%86', ''), '%E2%80%87', ''), '%E2%80%88', ''), '%E2%80%89', ''), '%E2%80%8A', ''), '%E2%80%A8', ''), '%E2%80%A9', ''), '%E2%80%AF', ''), '%E2%81%9F', ''), '%E3%80%80', ''), '%EF%BB%BF', ''))))",
+                "schema": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_onedrive_get_content_controls": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_onedrive_get_content_controls": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "OneDrive_content_metadata": {
+              "type": "OpenApiConnection",
+              "runAfter": {
+                "Validate_onedrive_get_content_controls": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "parameters": {
+                  "id": "@body('Validate_onedrive_get_content_args')?['fileId']"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_onedriveforbusiness",
+                  "connectionName": "shared_onedriveforbusiness",
+                  "operationId": "GetFileMetadata"
+                },
+                "authentication": "@parameters('$authentication')",
+                "retryPolicy": {
+                  "type": "none"
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs",
+                    "outputs"
+                  ]
+                }
+              }
+            },
+            "Error_OneDrive_content_metadata": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "OneDrive_content_metadata": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 502,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "UPSTREAM_ERROR",
+                    "message": "The upstream read could not be completed."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_onedrive_content_metadata": {
+              "type": "ParseJson",
+              "runAfter": {
+                "OneDrive_content_metadata": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@body('OneDrive_content_metadata')",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "Id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048
+                    },
+                    "Name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 512
+                    },
+                    "Size": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "MediaType": {
+                      "type": "string",
+                      "maxLength": 256
+                    },
+                    "IsFolder": {
+                      "type": "boolean"
+                    },
+                    "LastModified": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "maxLength": 2048
+                    },
+                    "ETag": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "maxLength": 2048
+                    },
+                    "Path": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "maxLength": 2048
+                    },
+                    "NameNoExt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "maxLength": 2048
+                    },
+                    "DisplayName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "maxLength": 2048
+                    },
+                    "FileLocator": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "maxLength": 2048
+                    }
+                  },
+                  "required": [
+                    "Id",
+                    "Name",
+                    "Size",
+                    "MediaType",
+                    "IsFolder"
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_onedrive_content_metadata": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_onedrive_content_metadata": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 502,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ONEDRIVE_METADATA",
+                    "message": "The upstream OneDrive metadata is invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Check_onedrive_content_identity": {
+              "type": "If",
+              "expression": {
+                "equals": [
+                  "@body('Validate_onedrive_content_metadata')?['Id']",
+                  "@body('Validate_onedrive_get_content_args')?['fileId']"
+                ]
+              },
+              "actions": {
+                "Check_onedrive_metadata_size": {
+                  "type": "If",
+                  "expression": {
+                    "and": [
+                      {
+                        "equals": [
+                          "@body('Validate_onedrive_content_metadata')?['IsFolder']",
+                          false
+                        ]
+                      },
+                      {
+                        "lessOrEquals": [
+                          "@body('Validate_onedrive_content_metadata')?['Size']",
+                          4194304
+                        ]
+                      },
+                      {
+                        "equals": [
+                          "@greater(body('Validate_onedrive_content_metadata')?['Size'], 0)",
+                          true
+                        ]
+                      }
+                    ]
+                  },
+                  "actions": {
+                    "Check_onedrive_content_type": {
+                      "type": "If",
+                      "expression": {
+                        "equals": [
+                          "@or(and(endsWith(toLower(body('Validate_onedrive_content_metadata')?['Name']), '.pdf'), or(or(equals(toLower(trim(first(split(body('Validate_onedrive_content_metadata')?['MediaType'], ';')))), ''), equals(toLower(trim(first(split(body('Validate_onedrive_content_metadata')?['MediaType'], ';')))), 'application/octet-stream')), equals(toLower(trim(first(split(body('Validate_onedrive_content_metadata')?['MediaType'], ';')))), 'application/pdf'))), and(endsWith(toLower(body('Validate_onedrive_content_metadata')?['Name']), '.docx'), or(or(equals(toLower(trim(first(split(body('Validate_onedrive_content_metadata')?['MediaType'], ';')))), ''), equals(toLower(trim(first(split(body('Validate_onedrive_content_metadata')?['MediaType'], ';')))), 'application/octet-stream')), equals(toLower(trim(first(split(body('Validate_onedrive_content_metadata')?['MediaType'], ';')))), 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'))), and(endsWith(toLower(body('Validate_onedrive_content_metadata')?['Name']), '.xlsx'), or(or(equals(toLower(trim(first(split(body('Validate_onedrive_content_metadata')?['MediaType'], ';')))), ''), equals(toLower(trim(first(split(body('Validate_onedrive_content_metadata')?['MediaType'], ';')))), 'application/octet-stream')), equals(toLower(trim(first(split(body('Validate_onedrive_content_metadata')?['MediaType'], ';')))), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'))))",
+                          true
+                        ]
+                      },
+                      "actions": {
+                        "OneDrive_get_content": {
+                          "type": "OpenApiConnection",
+                          "runAfter": {},
+                          "inputs": {
+                            "parameters": {
+                              "id": "@body('Validate_onedrive_get_content_args')?['fileId']",
+                              "inferContentType": true
+                            },
+                            "host": {
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_onedriveforbusiness",
+                              "connectionName": "shared_onedriveforbusiness",
+                              "operationId": "GetFileContent"
+                            },
+                            "authentication": "@parameters('$authentication')",
+                            "retryPolicy": {
+                              "type": "none"
+                            }
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
+                            }
+                          }
+                        },
+                        "Error_OneDrive_get_content": {
+                          "type": "Response",
+                          "kind": "Http",
+                          "runAfter": {
+                            "OneDrive_get_content": [
+                              "Failed",
+                              "TimedOut"
+                            ]
+                          },
+                          "inputs": {
+                            "statusCode": 502,
+                            "headers": {
+                              "Content-Type": "application/json",
+                              "Cache-Control": "no-store"
+                            },
+                            "body": {
+                              "ok": false,
+                              "error": {
+                                "code": "UPSTREAM_ERROR",
+                                "message": "The upstream read could not be completed."
+                              }
+                            }
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs"
+                              ]
+                            }
+                          }
+                        },
+                        "Validate_onedrive_binary": {
+                          "type": "ParseJson",
+                          "runAfter": {
+                            "OneDrive_get_content": [
+                              "Succeeded"
+                            ]
+                          },
+                          "inputs": {
+                            "content": {
+                              "$content-type": "@body('OneDrive_get_content')?['$content-type']",
+                              "$content": "@body('OneDrive_get_content')?['$content']"
+                            },
+                            "schema": {
+                              "type": "object",
+                              "properties": {
+                                "$content-type": {
+                                  "type": "string",
+                                  "maxLength": 256
+                                },
+                                "$content": {
+                                  "type": "string",
+                                  "minLength": 4,
+                                  "maxLength": 5592408
+                                }
+                              },
+                              "required": [
+                                "$content-type",
+                                "$content"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs"
+                              ]
+                            }
+                          }
+                        },
+                        "Error_Validate_onedrive_binary": {
+                          "type": "Response",
+                          "kind": "Http",
+                          "runAfter": {
+                            "Validate_onedrive_binary": [
+                              "Failed",
+                              "TimedOut"
+                            ]
+                          },
+                          "inputs": {
+                            "statusCode": 502,
+                            "headers": {
+                              "Content-Type": "application/json",
+                              "Cache-Control": "no-store"
+                            },
+                            "body": {
+                              "ok": false,
+                              "error": {
+                                "code": "INVALID_ONEDRIVE_CONTENT",
+                                "message": "The upstream OneDrive content is invalid or exceeds the limit."
+                              }
+                            }
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs"
+                              ]
+                            }
+                          }
+                        },
+                        "Select_onedrive_content_alphabet": {
+                          "type": "Select",
+                          "runAfter": {
+                            "Validate_onedrive_binary": [
+                              "Succeeded"
+                            ]
+                          },
+                          "inputs": {
+                            "from": "@chunk(body('Validate_onedrive_binary')?['$content'], 8192)",
+                            "select": "@and(equals(uriComponent(item()), replace(replace(replace(item(), '+', '%2B'), '/', '%2F'), '=', '%3D')), not(contains(item(), '-')), not(contains(item(), '_')), not(contains(item(), '.')), not(contains(item(), '!')), not(contains(item(), '~')), not(contains(item(), '*')), not(contains(item(), '''')), not(contains(item(), '(')), not(contains(item(), ')')))"
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
+                            }
+                          }
+                        },
+                        "Error_Select_onedrive_content_alphabet": {
+                          "type": "Response",
+                          "kind": "Http",
+                          "runAfter": {
+                            "Select_onedrive_content_alphabet": [
+                              "Failed",
+                              "TimedOut"
+                            ]
+                          },
+                          "inputs": {
+                            "statusCode": 502,
+                            "headers": {
+                              "Content-Type": "application/json",
+                              "Cache-Control": "no-store"
+                            },
+                            "body": {
+                              "ok": false,
+                              "error": {
+                                "code": "INVALID_ONEDRIVE_CONTENT",
+                                "message": "The upstream OneDrive content is invalid or exceeds the limit."
+                              }
+                            }
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs"
+                              ]
+                            }
+                          }
+                        },
+                        "Validate_onedrive_content_alphabet": {
+                          "type": "ParseJson",
+                          "runAfter": {
+                            "Select_onedrive_content_alphabet": [
+                              "Succeeded"
+                            ]
+                          },
+                          "inputs": {
+                            "content": "@body('Select_onedrive_content_alphabet')",
+                            "schema": {
+                              "type": "array",
+                              "maxItems": 683,
+                              "items": {
+                                "type": "boolean",
+                                "enum": [
+                                  true
+                                ]
+                              }
+                            }
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs"
+                              ]
+                            }
+                          }
+                        },
+                        "Error_Validate_onedrive_content_alphabet": {
+                          "type": "Response",
+                          "kind": "Http",
+                          "runAfter": {
+                            "Validate_onedrive_content_alphabet": [
+                              "Failed",
+                              "TimedOut"
+                            ]
+                          },
+                          "inputs": {
+                            "statusCode": 502,
+                            "headers": {
+                              "Content-Type": "application/json",
+                              "Cache-Control": "no-store"
+                            },
+                            "body": {
+                              "ok": false,
+                              "error": {
+                                "code": "INVALID_ONEDRIVE_CONTENT",
+                                "message": "The upstream OneDrive content is invalid or exceeds the limit."
+                              }
+                            }
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs"
+                              ]
+                            }
+                          }
+                        },
+                        "Check_onedrive_content_size": {
+                          "type": "If",
+                          "expression": {
+                            "and": [
+                              {
+                                "lessOrEquals": [
+                                  "@sub(mul(div(length(body('Validate_onedrive_binary')?['$content']), 4), 3), if(endsWith(body('Validate_onedrive_binary')?['$content'], '=='), 2, if(endsWith(body('Validate_onedrive_binary')?['$content'], '='), 1, 0)))",
+                                  4194304
+                                ]
+                              },
+                              {
+                                "equals": [
+                                  "@sub(mul(div(length(body('Validate_onedrive_binary')?['$content']), 4), 3), if(endsWith(body('Validate_onedrive_binary')?['$content'], '=='), 2, if(endsWith(body('Validate_onedrive_binary')?['$content'], '='), 1, 0)))",
+                                  "@body('Validate_onedrive_content_metadata')?['Size']"
+                                ]
+                              },
+                              {
+                                "equals": [
+                                  "@or(and(endsWith(toLower(body('Validate_onedrive_content_metadata')?['Name']), '.pdf'), or(or(equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['$content-type'], ';')))), ''), equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['$content-type'], ';')))), 'application/octet-stream')), equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['$content-type'], ';')))), 'application/pdf'))), and(endsWith(toLower(body('Validate_onedrive_content_metadata')?['Name']), '.docx'), or(or(equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['$content-type'], ';')))), ''), equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['$content-type'], ';')))), 'application/octet-stream')), equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['$content-type'], ';')))), 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'))), and(endsWith(toLower(body('Validate_onedrive_content_metadata')?['Name']), '.xlsx'), or(or(equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['$content-type'], ';')))), ''), equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['$content-type'], ';')))), 'application/octet-stream')), equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['$content-type'], ';')))), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'))))",
+                                  true
+                                ]
+                              },
+                              {
+                                "equals": [
+                                  "@mod(length(body('Validate_onedrive_binary')?['$content']), 4)",
+                                  0
+                                ]
+                              },
+                              {
+                                "equals": [
+                                  "@or(equals(indexOf(body('Validate_onedrive_binary')?['$content'], '='), -1), equals(indexOf(body('Validate_onedrive_binary')?['$content'], '='), sub(length(body('Validate_onedrive_binary')?['$content']), if(endsWith(body('Validate_onedrive_binary')?['$content'], '=='), 2, 1))))",
+                                  true
+                                ]
+                              }
+                            ]
+                          },
+                          "actions": {
+                            "Respond_onedrive_content": {
+                              "type": "Response",
+                              "kind": "Http",
+                              "runAfter": {},
+                              "inputs": {
+                                "statusCode": 200,
+                                "headers": {
+                                  "Content-Type": "application/json",
+                                  "Cache-Control": "no-store"
+                                },
+                                "body": {
+                                  "ok": true,
+                                  "requestId": "@triggerBody()?['requestId']",
+                                  "operation": "@triggerBody()?['operation']",
+                                  "data": {
+                                    "metadata": {
+                                      "Id": "@body('Validate_onedrive_content_metadata')?['Id']",
+                                      "Name": "@body('Validate_onedrive_content_metadata')?['Name']",
+                                      "Size": "@body('Validate_onedrive_content_metadata')?['Size']",
+                                      "MediaType": "@body('Validate_onedrive_content_metadata')?['MediaType']",
+                                      "IsFolder": "@body('Validate_onedrive_content_metadata')?['IsFolder']",
+                                      "LastModified": "@body('Validate_onedrive_content_metadata')?['LastModified']",
+                                      "ETag": "@body('Validate_onedrive_content_metadata')?['ETag']"
+                                    },
+                                    "contentBytes": "@body('Validate_onedrive_binary')?['$content']"
+                                  }
+                                }
+                              },
+                              "runtimeConfiguration": {
+                                "secureData": {
+                                  "properties": [
+                                    "inputs"
+                                  ]
+                                }
+                              }
+                            }
+                          },
+                          "else": {
+                            "actions": {
+                              "Reject_onedrive_content": {
+                                "type": "Response",
+                                "kind": "Http",
+                                "runAfter": {},
+                                "inputs": {
+                                  "statusCode": 502,
+                                  "headers": {
+                                    "Content-Type": "application/json",
+                                    "Cache-Control": "no-store"
+                                  },
+                                  "body": {
+                                    "ok": false,
+                                    "error": {
+                                      "code": "INVALID_ONEDRIVE_CONTENT",
+                                      "message": "The upstream OneDrive content is invalid or exceeds the limit."
+                                    }
+                                  }
+                                },
+                                "runtimeConfiguration": {
+                                  "secureData": {
+                                    "properties": [
+                                      "inputs"
+                                    ]
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "runAfter": {
+                            "Validate_onedrive_content_alphabet": [
+                              "Succeeded"
+                            ]
+                          }
+                        }
+                      },
+                      "else": {
+                        "actions": {
+                          "Reject_onedrive_content_type": {
+                            "type": "Response",
+                            "kind": "Http",
+                            "runAfter": {},
+                            "inputs": {
+                              "statusCode": 415,
+                              "headers": {
+                                "Content-Type": "application/json",
+                                "Cache-Control": "no-store"
+                              },
+                              "body": {
+                                "ok": false,
+                                "error": {
+                                  "code": "UNSUPPORTED_ONEDRIVE_FILE_TYPE",
+                                  "message": "Only PDF, DOCX, and XLSX files can be read."
+                                }
+                              }
+                            },
+                            "runtimeConfiguration": {
+                              "secureData": {
+                                "properties": [
+                                  "inputs"
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "runAfter": {}
+                    }
+                  },
+                  "else": {
+                    "actions": {
+                      "Reject_onedrive_content_size": {
+                        "type": "Response",
+                        "kind": "Http",
+                        "runAfter": {},
+                        "inputs": {
+                          "statusCode": 413,
+                          "headers": {
+                            "Content-Type": "application/json",
+                            "Cache-Control": "no-store"
+                          },
+                          "body": {
+                            "ok": false,
+                            "error": {
+                              "code": "ONEDRIVE_FILE_TOO_LARGE",
+                              "message": "The OneDrive file is empty, a folder, or exceeds the 4 MiB limit."
+                            }
+                          }
+                        },
+                        "runtimeConfiguration": {
+                          "secureData": {
+                            "properties": [
+                              "inputs"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "runAfter": {}
+                }
+              },
+              "else": {
+                "actions": {
+                  "Reject_onedrive_content_metadata": {
+                    "type": "Response",
+                    "kind": "Http",
+                    "runAfter": {},
+                    "inputs": {
+                      "statusCode": 502,
+                      "headers": {
+                        "Content-Type": "application/json",
+                        "Cache-Control": "no-store"
+                      },
+                      "body": {
+                        "ok": false,
+                        "error": {
+                          "code": "INVALID_ONEDRIVE_METADATA",
+                          "message": "The upstream OneDrive metadata is invalid."
+                        }
+                      }
+                    },
+                    "runtimeConfiguration": {
+                      "secureData": {
+                        "properties": [
+                          "inputs"
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              "runAfter": {
+                "Validate_onedrive_content_metadata": [
                   "Succeeded"
                 ]
               }
