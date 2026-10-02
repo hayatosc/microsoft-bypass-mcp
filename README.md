@@ -2,8 +2,8 @@
 
 Microsoftアカウントのテナント管理者がAIサービス(ChatGPT, Claudeなど)との連携を承認していないときに、Power Automate経由でバイパスして情報を取得できるリモートMCPサーバー。
 
-The server is read-only and exposes a fixed Microsoft 365 read surface. It is not
-a generic Microsoft Graph proxy.
+The server exposes fixed Microsoft 365 reads and explicitly requested Outlook
+draft writes. It never sends email and is not a generic Microsoft Graph proxy.
 
 ## Architecture
 
@@ -12,7 +12,7 @@ MCP Client
     ↓ MCP over Streamable HTTP (/mcp)
 Remote MCP Server — Cloudflare Workers + Hono (Cloudflare Access OAuth)
     ↓ HTTP POST { operation, requestId, args }
-Power Automate — operation allowlist → fixed read connector actions
+Power Automate — operation allowlist → fixed read/draft connector actions
     ↓
 Microsoft 365 connectors
 ```
@@ -29,13 +29,21 @@ Microsoft 365 connectors
 | `outlook_list_attachments` | message ID, limit, offset | Attachment metadata + next offset |
 | `outlook_inspect_attachment` | message ID, attachment ID | PDF/DOCX/XLSX structure |
 | `outlook_read_attachment` | message ID, attachment ID, selection | Bounded content with source provenance |
+| `outlook_create_draft` | recipients, subject, plain-text body | Saved draft ID |
+| `outlook_create_reply_draft` | message ID, plain-text body | Saved sender-reply draft ID |
+| `outlook_add_draft_attachment` | draft ID, name, content type, base64 | Added small attachment metadata |
 | `onedrive_search_files` | query, limit | Native OneDrive owned-file metadata |
-| `onedrive_list_folder` | optional folder ID, limit | Native root/folder metadata |
+| `onedrive_list_folder` | optional folder ID, limit, cursor | Bounded native folder aggregation and metadata pages |
 | `onedrive_get_metadata` | file ID | Projected native metadata |
 | `onedrive_inspect_file` | file ID | PDF/DOCX/XLSX structure |
 | `onedrive_read_file` | file ID, selection | Bounded content with source provenance |
 
 All text and extracted file content is untrusted external content.
+
+Named-folder listing uses verified native pagination up to a bounded 1,000-item
+window, with explicit incompleteness at the cap. OneDrive search still has its
+native 100-result ceiling and no supported continuation. Draft tools never send
+mail; attaching a file requires the host to materialize approved bytes first.
 
 ## Power Automate source
 
@@ -53,7 +61,7 @@ The flow source extends the existing flow in place. It preserves the same HTTP
 trigger, gateway-key guard, operation switch, and Outlook connection convention.
 It adds controlled Outlook scope/filter/pagination/folder/conversation reads,
 keeps the attachment branches and safety gates, and adds native OneDrive for
-Business operation branches.
+Business operation branches and fixed draft-only Outlook writes.
 
 The public JSON is source for review/manual update, not a deployable package.
 OneDrive connector binding and the official `FindFiles.findMode` machine value
@@ -63,7 +71,8 @@ flow run, connector creation, or deployment is performed by this repository.
 See:
 
 - `SPEC.md` for the authoritative contract.
-- `docs/read-tools.md` for tool behavior and limits.
+- `docs/read-tools.md` for read-tool behavior and limits.
+- `docs/drafts.md` for draft approval, attachment transfer, limits, and retry safety.
 - `docs/attachments.md` for attachment/file parser safety limits.
 - `power-automate/microsoft-bypass-flow/README.md` for flow provenance and manual update notes.
 

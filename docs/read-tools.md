@@ -1,6 +1,7 @@
 # Read tools
 
-This MCP server exposes fixed read-only tools for Outlook and OneDrive. It does
+The read tools in this document are read-only. The server also has separately
+documented [Outlook draft tools](drafts.md). It does
 not expose a generic Microsoft Graph proxy, a generic OneDrive proxy, arbitrary
 URLs, arbitrary methods, caller-supplied OData, download URLs, sharing links, or
 Power Automate nextLink replay.
@@ -121,11 +122,47 @@ have fixed empty-string inputs by default. Search fails closed before connector 
 verified tenant/designer values. Bind the native connection separately during an
 authorized manual update.
 
+Native search exposes no supported continuation argument and returns at most 100
+results. No search cursor is implemented: paging slices of those same results
+would not retrieve matches beyond the connector cap. Narrow the query or browse
+a known folder when a search is incomplete.
+
 ### `onedrive_list_folder`
 
 Uses `ListRootFolder` when no `folderId` is supplied and `ListFolderV2(id)` when
-one is supplied. Native nextLink presence becomes an incomplete flag only. The
-server does not accept or follow nextLink URLs.
+one is supplied. For named folders, the native connector's supported pagination
+setting follows its own continuation tokens, with a threshold of 1,000 items.
+The flow projects at most 1,000 metadata records even when the final native page
+overshoots that threshold. Root listing is bounded to the returned array and does
+not claim supported native continuation for `ListRootFolder`.
+
+The MCP `limit` remains 1–100 (default 50). `nextCursor` retrieves the next slice
+of that fixed bounded window. Each call re-fetches the window; there is no server
+cache. Cursors bind to the exact folder/root, limit, and a fingerprint of the
+ordered metadata window. A changed window rejects continuation: restart without
+a cursor. No cursor contains a folder ID, raw metadata, or an upstream URL.
+
+`hasMore` includes both known records remaining in the window and possible
+upstream truncation. `nextCursor` exists only for known records in the window.
+At the window boundary, `hasMore: true` with `nextCursor: null` and an
+`incompleteReason` means more native data may exist but cannot be retrieved by
+this bounded operation. Reaching exactly 1,000 is conservatively incomplete;
+this is not unlimited enumeration or a stable snapshot of a changing drive.
+
+The Worker never follows native nextLink URLs, and callers cannot supply them.
+A folder window has a 4 MiB transport ceiling; an over-limit response fails
+safely rather than silently dropping metadata. Normal MCP results still contain
+at most 100 records and remain subject to the shared output-size limit.
+
+Re-fetching can repeat multiple native requests on every page and consume the
+connector's request allowance. The published OneDrive connector limit is 100
+calls per 60 seconds; actual tenant behavior and aggregation latency need live
+verification. A timeout is a failed read, not evidence that enumeration is
+complete. Use a smaller folder where possible; this design deliberately adds no
+persistent cache.
+
+Sources: [OneDrive connector operations and limits](https://learn.microsoft.com/en-us/connectors/onedriveforbusiness/)
+and [native runtime pagination](https://learn.microsoft.com/en-us/azure/logic-apps/logic-apps-exceed-default-page-size-with-pagination).
 
 ### `onedrive_get_metadata`
 

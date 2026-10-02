@@ -36,6 +36,28 @@ describe('mcp endpoint', () => {
     )
     expect(res.status).toBe(200)
   })
+
+  it('rejects MCP request bodies above 4 MiB before the handler', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+    try {
+      const res = await app.request(
+        '/mcp',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json, text/event-stream',
+          },
+          body: 'x'.repeat(4 * 1024 * 1024 + 1),
+        },
+        env,
+      )
+      expect(res.status).toBe(413)
+      expect(fetchMock).not.toHaveBeenCalled()
+    } finally {
+      fetchMock.mockRestore()
+    }
+  })
 })
 
 describe('attachment tools through Hono', () => {
@@ -128,13 +150,20 @@ describe('attachment tools through Hono', () => {
 })
 
 describe('public info', () => {
-  it('GET / exposes the server name and tools', async () => {
+  it('GET / exposes the server name, version, and tools', async () => {
     const res = await app.request('/')
     expect(res.status).toBe(200)
-    const text = await res.text()
-    expect(text).toContain('outlook_list_messages')
-    expect(text).toContain('outlook_search_messages')
-    expect(text).toContain('outlook_get_message')
+    const body = z
+      .object({ version: z.string(), tools: z.array(z.string()) })
+      .passthrough()
+      .parse(await res.json())
+    expect(body.version).toBe('0.3.0')
+    expect(body.tools).toContain('outlook_list_messages')
+    expect(body.tools).toContain('outlook_search_messages')
+    expect(body.tools).toContain('outlook_get_message')
+    expect(body.tools).toContain('outlook_create_draft')
+    expect(body.tools).toContain('outlook_create_reply_draft')
+    expect(body.tools).toContain('outlook_add_draft_attachment')
   })
 })
 

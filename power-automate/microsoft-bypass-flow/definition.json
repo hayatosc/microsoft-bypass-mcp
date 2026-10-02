@@ -36,7 +36,10 @@
                 "onedrive_search_files",
                 "onedrive_list_folder",
                 "onedrive_get_metadata",
-                "onedrive_get_content"
+                "onedrive_get_content",
+                "create_draft",
+                "create_reply_draft",
+                "add_draft_attachment"
               ]
             },
             "requestId": {
@@ -153,7 +156,7 @@
                 ]
               },
               "inputs": {
-                "content": "@and(equals(length(toLower(replace(body('Validate_list_messages_request')?['requestId'], '-', ''))), 32), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(replace(body('Validate_list_messages_request')?['requestId'], '-', '')), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), 'a', ''), 'b', ''), 'c', ''), 'd', ''), 'e', ''), 'f', ''), ''), equals(substring(body('Validate_list_messages_request')?['requestId'], 8, 1), '-'), equals(substring(body('Validate_list_messages_request')?['requestId'], 13, 1), '-'), equals(substring(body('Validate_list_messages_request')?['requestId'], 18, 1), '-'), equals(substring(body('Validate_list_messages_request')?['requestId'], 23, 1), '-'), equals(substring(body('Validate_list_messages_request')?['requestId'], 14, 1), '4'), contains('89ab', toLower(substring(body('Validate_list_messages_request')?['requestId'], 19, 1))))",
+                "content": "@and(equals(length(toLower(replace(body('Validate_list_messages_request')?['requestId'], '-', string(null)))), 32), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(replace(body('Validate_list_messages_request')?['requestId'], '-', string(null))), '0', string(null)), '1', string(null)), '2', string(null)), '3', string(null)), '4', string(null)), '5', string(null)), '6', string(null)), '7', string(null)), '8', string(null)), '9', string(null)), 'a', string(null)), 'b', string(null)), 'c', string(null)), 'd', string(null)), 'e', string(null)), 'f', string(null)), string(null)), equals(substring(body('Validate_list_messages_request')?['requestId'], 8, 1), '-'), equals(substring(body('Validate_list_messages_request')?['requestId'], 13, 1), '-'), equals(substring(body('Validate_list_messages_request')?['requestId'], 18, 1), '-'), equals(substring(body('Validate_list_messages_request')?['requestId'], 23, 1), '-'), equals(substring(body('Validate_list_messages_request')?['requestId'], 14, 1), '4'), contains('89ab', toLower(substring(body('Validate_list_messages_request')?['requestId'], 19, 1))))",
                 "schema": {
                   "type": "boolean",
                   "enum": [
@@ -311,7 +314,7 @@
                 ]
               },
               "inputs": {
-                "content": "@and(and(not(equals(coalesce(body('Validate_list_messages_args')?['folderId'], 'unused'), '.')), not(equals(coalesce(body('Validate_list_messages_args')?['folderId'], 'unused'), '..')), equals(length(uriComponent(coalesce(body('Validate_list_messages_args')?['folderId'], 'unused'))), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(coalesce(body('Validate_list_messages_args')?['folderId'], 'unused')), '%0', ''), '%1', ''), '%20', ''), '%7F', ''), '%C2%85', ''), '%C2%A0', ''), '%E1%9A%80', ''), '%E2%80%80', ''), '%E2%80%81', ''), '%E2%80%82', ''), '%E2%80%83', ''), '%E2%80%84', ''), '%E2%80%85', ''), '%E2%80%86', ''), '%E2%80%87', ''), '%E2%80%88', ''), '%E2%80%89', ''), '%E2%80%8A', ''), '%E2%80%A8', ''), '%E2%80%A9', ''), '%E2%80%AF', ''), '%E2%81%9F', ''), '%E3%80%80', ''), '%EF%BB%BF', '')))), and(equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(coalesce(body('Validate_list_messages_args')?['filters']?['receivedAfter'], '2000-01-01T00:00:00Z'), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), '-', ''), ':', ''), '.', ''), 'T', ''), 'Z', ''), ''), equals(substring(coalesce(body('Validate_list_messages_args')?['filters']?['receivedAfter'], '2000-01-01T00:00:00Z'), 10, 1), 'T'), endsWith(coalesce(body('Validate_list_messages_args')?['filters']?['receivedAfter'], '2000-01-01T00:00:00Z'), 'Z'), greaterOrEquals(ticks(coalesce(body('Validate_list_messages_args')?['filters']?['receivedAfter'], '2000-01-01T00:00:00Z')), 0)), and(equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(coalesce(body('Validate_list_messages_args')?['filters']?['receivedBefore'], '2000-01-01T00:00:00Z'), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), '-', ''), ':', ''), '.', ''), 'T', ''), 'Z', ''), ''), equals(substring(coalesce(body('Validate_list_messages_args')?['filters']?['receivedBefore'], '2000-01-01T00:00:00Z'), 10, 1), 'T'), endsWith(coalesce(body('Validate_list_messages_args')?['filters']?['receivedBefore'], '2000-01-01T00:00:00Z'), 'Z'), greaterOrEquals(ticks(coalesce(body('Validate_list_messages_args')?['filters']?['receivedBefore'], '2000-01-01T00:00:00Z')), 0)), or(equals(body('Validate_list_messages_args')?['filters']?['receivedAfter'], null), equals(body('Validate_list_messages_args')?['filters']?['receivedBefore'], null), less(ticks(coalesce(body('Validate_list_messages_args')?['filters']?['receivedAfter'], '0001-01-01T00:00:00Z')), ticks(coalesce(body('Validate_list_messages_args')?['filters']?['receivedBefore'], '9999-12-31T23:59:59Z')))))",
+                "content": "@and(and(not(equals(coalesce(body('Validate_list_messages_args')?['folderId'], 'unused'), '.')), not(equals(coalesce(body('Validate_list_messages_args')?['folderId'], 'unused'), '..')), equals(length(uriComponent(coalesce(body('Validate_list_messages_args')?['folderId'], 'unused'))), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(coalesce(body('Validate_list_messages_args')?['folderId'], 'unused')), '%0', string(null)), '%1', string(null)), '%20', string(null)), '%7F', string(null)), '%C2%85', string(null)), '%C2%A0', string(null)), '%E1%9A%80', string(null)), '%E2%80%80', string(null)), '%E2%80%81', string(null)), '%E2%80%82', string(null)), '%E2%80%83', string(null)), '%E2%80%84', string(null)), '%E2%80%85', string(null)), '%E2%80%86', string(null)), '%E2%80%87', string(null)), '%E2%80%88', string(null)), '%E2%80%89', string(null)), '%E2%80%8A', string(null)), '%E2%80%A8', string(null)), '%E2%80%A9', string(null)), '%E2%80%AF', string(null)), '%E2%81%9F', string(null)), '%E3%80%80', string(null)), '%EF%BB%BF', string(null))))), and(equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(coalesce(body('Validate_list_messages_args')?['filters']?['receivedAfter'], '2000-01-01T00:00:00Z'), '0', string(null)), '1', string(null)), '2', string(null)), '3', string(null)), '4', string(null)), '5', string(null)), '6', string(null)), '7', string(null)), '8', string(null)), '9', string(null)), '-', string(null)), ':', string(null)), '.', string(null)), 'T', string(null)), 'Z', string(null)), string(null)), equals(substring(coalesce(body('Validate_list_messages_args')?['filters']?['receivedAfter'], '2000-01-01T00:00:00Z'), 10, 1), 'T'), endsWith(coalesce(body('Validate_list_messages_args')?['filters']?['receivedAfter'], '2000-01-01T00:00:00Z'), 'Z'), greaterOrEquals(ticks(coalesce(body('Validate_list_messages_args')?['filters']?['receivedAfter'], '2000-01-01T00:00:00Z')), 0)), and(equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(coalesce(body('Validate_list_messages_args')?['filters']?['receivedBefore'], '2000-01-01T00:00:00Z'), '0', string(null)), '1', string(null)), '2', string(null)), '3', string(null)), '4', string(null)), '5', string(null)), '6', string(null)), '7', string(null)), '8', string(null)), '9', string(null)), '-', string(null)), ':', string(null)), '.', string(null)), 'T', string(null)), 'Z', string(null)), string(null)), equals(substring(coalesce(body('Validate_list_messages_args')?['filters']?['receivedBefore'], '2000-01-01T00:00:00Z'), 10, 1), 'T'), endsWith(coalesce(body('Validate_list_messages_args')?['filters']?['receivedBefore'], '2000-01-01T00:00:00Z'), 'Z'), greaterOrEquals(ticks(coalesce(body('Validate_list_messages_args')?['filters']?['receivedBefore'], '2000-01-01T00:00:00Z')), 0)), or(equals(body('Validate_list_messages_args')?['filters']?['receivedAfter'], null), equals(body('Validate_list_messages_args')?['filters']?['receivedBefore'], null), less(ticks(coalesce(body('Validate_list_messages_args')?['filters']?['receivedAfter'], '0001-01-01T00:00:00Z')), ticks(coalesce(body('Validate_list_messages_args')?['filters']?['receivedBefore'], '9999-12-31T23:59:59Z')))))",
                 "schema": {
                   "type": "boolean",
                   "enum": [
@@ -381,7 +384,7 @@
                   "Succeeded"
                 ]
               },
-              "inputs": "@concat(if(equals(body('Validate_list_messages_args')?['filters']?['isRead'], null), '', concat('isRead eq ', toLower(string(body('Validate_list_messages_args')?['filters']?['isRead'])))),if(equals(body('Validate_list_messages_args')?['filters']?['hasAttachments'], null), '', concat(if(equals(body('Validate_list_messages_args')?['filters']?['isRead'], null), '', ' and '), 'hasAttachments eq ', toLower(string(body('Validate_list_messages_args')?['filters']?['hasAttachments'])))),if(empty(body('Validate_list_messages_args')?['filters']?['receivedAfter']), '', concat(if(or(not(equals(body('Validate_list_messages_args')?['filters']?['isRead'], null)), not(equals(body('Validate_list_messages_args')?['filters']?['hasAttachments'], null))), ' and ', ''), 'receivedDateTime ge ', body('Validate_list_messages_args')?['filters']?['receivedAfter'])),if(empty(body('Validate_list_messages_args')?['filters']?['receivedBefore']), '', concat(if(or(not(equals(body('Validate_list_messages_args')?['filters']?['isRead'], null)), not(equals(body('Validate_list_messages_args')?['filters']?['hasAttachments'], null)), not(empty(body('Validate_list_messages_args')?['filters']?['receivedAfter']))), ' and ', ''), 'receivedDateTime lt ', body('Validate_list_messages_args')?['filters']?['receivedBefore'])))",
+              "inputs": "@concat(if(equals(body('Validate_list_messages_args')?['filters']?['isRead'], null), string(null), concat('isRead eq ', toLower(string(body('Validate_list_messages_args')?['filters']?['isRead'])))),if(equals(body('Validate_list_messages_args')?['filters']?['hasAttachments'], null), string(null), concat(if(equals(body('Validate_list_messages_args')?['filters']?['isRead'], null), string(null), ' and '), 'hasAttachments eq ', toLower(string(body('Validate_list_messages_args')?['filters']?['hasAttachments'])))),if(empty(body('Validate_list_messages_args')?['filters']?['receivedAfter']), string(null), concat(if(or(not(equals(body('Validate_list_messages_args')?['filters']?['isRead'], null)), not(equals(body('Validate_list_messages_args')?['filters']?['hasAttachments'], null))), ' and ', string(null)), 'receivedDateTime ge ', body('Validate_list_messages_args')?['filters']?['receivedAfter'])),if(empty(body('Validate_list_messages_args')?['filters']?['receivedBefore']), string(null), concat(if(or(not(equals(body('Validate_list_messages_args')?['filters']?['isRead'], null)), not(equals(body('Validate_list_messages_args')?['filters']?['hasAttachments'], null)), not(empty(body('Validate_list_messages_args')?['filters']?['receivedAfter']))), ' and ', string(null)), 'receivedDateTime lt ', body('Validate_list_messages_args')?['filters']?['receivedBefore'])))",
               "runtimeConfiguration": {
                 "secureData": {
                   "properties": [
@@ -566,7 +569,7 @@
                 ]
               },
               "inputs": {
-                "content": "@and(equals(length(toLower(replace(body('Validate_get_message_request')?['requestId'], '-', ''))), 32), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(replace(body('Validate_get_message_request')?['requestId'], '-', '')), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), 'a', ''), 'b', ''), 'c', ''), 'd', ''), 'e', ''), 'f', ''), ''), equals(substring(body('Validate_get_message_request')?['requestId'], 8, 1), '-'), equals(substring(body('Validate_get_message_request')?['requestId'], 13, 1), '-'), equals(substring(body('Validate_get_message_request')?['requestId'], 18, 1), '-'), equals(substring(body('Validate_get_message_request')?['requestId'], 23, 1), '-'), equals(substring(body('Validate_get_message_request')?['requestId'], 14, 1), '4'), contains('89ab', toLower(substring(body('Validate_get_message_request')?['requestId'], 19, 1))))",
+                "content": "@and(equals(length(toLower(replace(body('Validate_get_message_request')?['requestId'], '-', string(null)))), 32), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(replace(body('Validate_get_message_request')?['requestId'], '-', string(null))), '0', string(null)), '1', string(null)), '2', string(null)), '3', string(null)), '4', string(null)), '5', string(null)), '6', string(null)), '7', string(null)), '8', string(null)), '9', string(null)), 'a', string(null)), 'b', string(null)), 'c', string(null)), 'd', string(null)), 'e', string(null)), 'f', string(null)), string(null)), equals(substring(body('Validate_get_message_request')?['requestId'], 8, 1), '-'), equals(substring(body('Validate_get_message_request')?['requestId'], 13, 1), '-'), equals(substring(body('Validate_get_message_request')?['requestId'], 18, 1), '-'), equals(substring(body('Validate_get_message_request')?['requestId'], 23, 1), '-'), equals(substring(body('Validate_get_message_request')?['requestId'], 14, 1), '4'), contains('89ab', toLower(substring(body('Validate_get_message_request')?['requestId'], 19, 1))))",
                 "schema": {
                   "type": "boolean",
                   "enum": [
@@ -684,7 +687,7 @@
                 ]
               },
               "inputs": {
-                "content": "@and(not(equals(coalesce(body('Validate_get_message_args')?['messageId'], 'unused'), '.')), not(equals(coalesce(body('Validate_get_message_args')?['messageId'], 'unused'), '..')), equals(length(uriComponent(coalesce(body('Validate_get_message_args')?['messageId'], 'unused'))), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(coalesce(body('Validate_get_message_args')?['messageId'], 'unused')), '%0', ''), '%1', ''), '%20', ''), '%7F', ''), '%C2%85', ''), '%C2%A0', ''), '%E1%9A%80', ''), '%E2%80%80', ''), '%E2%80%81', ''), '%E2%80%82', ''), '%E2%80%83', ''), '%E2%80%84', ''), '%E2%80%85', ''), '%E2%80%86', ''), '%E2%80%87', ''), '%E2%80%88', ''), '%E2%80%89', ''), '%E2%80%8A', ''), '%E2%80%A8', ''), '%E2%80%A9', ''), '%E2%80%AF', ''), '%E2%81%9F', ''), '%E3%80%80', ''), '%EF%BB%BF', ''))))",
+                "content": "@and(not(equals(coalesce(body('Validate_get_message_args')?['messageId'], 'unused'), '.')), not(equals(coalesce(body('Validate_get_message_args')?['messageId'], 'unused'), '..')), equals(length(uriComponent(coalesce(body('Validate_get_message_args')?['messageId'], 'unused'))), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(coalesce(body('Validate_get_message_args')?['messageId'], 'unused')), '%0', string(null)), '%1', string(null)), '%20', string(null)), '%7F', string(null)), '%C2%85', string(null)), '%C2%A0', string(null)), '%E1%9A%80', string(null)), '%E2%80%80', string(null)), '%E2%80%81', string(null)), '%E2%80%82', string(null)), '%E2%80%83', string(null)), '%E2%80%84', string(null)), '%E2%80%85', string(null)), '%E2%80%86', string(null)), '%E2%80%87', string(null)), '%E2%80%88', string(null)), '%E2%80%89', string(null)), '%E2%80%8A', string(null)), '%E2%80%A8', string(null)), '%E2%80%A9', string(null)), '%E2%80%AF', string(null)), '%E2%81%9F', string(null)), '%E3%80%80', string(null)), '%EF%BB%BF', string(null)))))",
                 "schema": {
                   "type": "boolean",
                   "enum": [
@@ -908,7 +911,7 @@
                 ]
               },
               "inputs": {
-                "content": "@and(equals(length(toLower(replace(body('Validate_search_messages_request')?['requestId'], '-', ''))), 32), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(replace(body('Validate_search_messages_request')?['requestId'], '-', '')), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), 'a', ''), 'b', ''), 'c', ''), 'd', ''), 'e', ''), 'f', ''), ''), equals(substring(body('Validate_search_messages_request')?['requestId'], 8, 1), '-'), equals(substring(body('Validate_search_messages_request')?['requestId'], 13, 1), '-'), equals(substring(body('Validate_search_messages_request')?['requestId'], 18, 1), '-'), equals(substring(body('Validate_search_messages_request')?['requestId'], 23, 1), '-'), equals(substring(body('Validate_search_messages_request')?['requestId'], 14, 1), '4'), contains('89ab', toLower(substring(body('Validate_search_messages_request')?['requestId'], 19, 1))))",
+                "content": "@and(equals(length(toLower(replace(body('Validate_search_messages_request')?['requestId'], '-', string(null)))), 32), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(replace(body('Validate_search_messages_request')?['requestId'], '-', string(null))), '0', string(null)), '1', string(null)), '2', string(null)), '3', string(null)), '4', string(null)), '5', string(null)), '6', string(null)), '7', string(null)), '8', string(null)), '9', string(null)), 'a', string(null)), 'b', string(null)), 'c', string(null)), 'd', string(null)), 'e', string(null)), 'f', string(null)), string(null)), equals(substring(body('Validate_search_messages_request')?['requestId'], 8, 1), '-'), equals(substring(body('Validate_search_messages_request')?['requestId'], 13, 1), '-'), equals(substring(body('Validate_search_messages_request')?['requestId'], 18, 1), '-'), equals(substring(body('Validate_search_messages_request')?['requestId'], 23, 1), '-'), equals(substring(body('Validate_search_messages_request')?['requestId'], 14, 1), '4'), contains('89ab', toLower(substring(body('Validate_search_messages_request')?['requestId'], 19, 1))))",
                 "schema": {
                   "type": "boolean",
                   "enum": [
@@ -1045,7 +1048,7 @@
                 ]
               },
               "inputs": {
-                "content": "@and(and(not(empty(trim(body('Validate_search_messages_args')?['query']))), lessOrEquals(length(trim(body('Validate_search_messages_args')?['query'])), 512)), and(not(equals(coalesce(body('Validate_search_messages_args')?['folderId'], 'unused'), '.')), not(equals(coalesce(body('Validate_search_messages_args')?['folderId'], 'unused'), '..')), equals(length(uriComponent(coalesce(body('Validate_search_messages_args')?['folderId'], 'unused'))), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(coalesce(body('Validate_search_messages_args')?['folderId'], 'unused')), '%0', ''), '%1', ''), '%20', ''), '%7F', ''), '%C2%85', ''), '%C2%A0', ''), '%E1%9A%80', ''), '%E2%80%80', ''), '%E2%80%81', ''), '%E2%80%82', ''), '%E2%80%83', ''), '%E2%80%84', ''), '%E2%80%85', ''), '%E2%80%86', ''), '%E2%80%87', ''), '%E2%80%88', ''), '%E2%80%89', ''), '%E2%80%8A', ''), '%E2%80%A8', ''), '%E2%80%A9', ''), '%E2%80%AF', ''), '%E2%81%9F', ''), '%E3%80%80', ''), '%EF%BB%BF', '')))))",
+                "content": "@and(and(not(empty(trim(body('Validate_search_messages_args')?['query']))), lessOrEquals(length(trim(body('Validate_search_messages_args')?['query'])), 512)), and(not(equals(coalesce(body('Validate_search_messages_args')?['folderId'], 'unused'), '.')), not(equals(coalesce(body('Validate_search_messages_args')?['folderId'], 'unused'), '..')), equals(length(uriComponent(coalesce(body('Validate_search_messages_args')?['folderId'], 'unused'))), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(coalesce(body('Validate_search_messages_args')?['folderId'], 'unused')), '%0', string(null)), '%1', string(null)), '%20', string(null)), '%7F', string(null)), '%C2%85', string(null)), '%C2%A0', string(null)), '%E1%9A%80', string(null)), '%E2%80%80', string(null)), '%E2%80%81', string(null)), '%E2%80%82', string(null)), '%E2%80%83', string(null)), '%E2%80%84', string(null)), '%E2%80%85', string(null)), '%E2%80%86', string(null)), '%E2%80%87', string(null)), '%E2%80%88', string(null)), '%E2%80%89', string(null)), '%E2%80%8A', string(null)), '%E2%80%A8', string(null)), '%E2%80%A9', string(null)), '%E2%80%AF', string(null)), '%E2%81%9F', string(null)), '%E3%80%80', string(null)), '%EF%BB%BF', string(null))))))",
                 "schema": {
                   "type": "boolean",
                   "enum": [
@@ -1284,7 +1287,7 @@
                 ]
               },
               "inputs": {
-                "content": "@and(equals(length(toLower(replace(body('Validate_list_attachments_request')?['requestId'], '-', ''))), 32), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(replace(body('Validate_list_attachments_request')?['requestId'], '-', '')), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), 'a', ''), 'b', ''), 'c', ''), 'd', ''), 'e', ''), 'f', ''), ''), equals(substring(body('Validate_list_attachments_request')?['requestId'], 8, 1), '-'), equals(substring(body('Validate_list_attachments_request')?['requestId'], 13, 1), '-'), equals(substring(body('Validate_list_attachments_request')?['requestId'], 18, 1), '-'), equals(substring(body('Validate_list_attachments_request')?['requestId'], 23, 1), '-'), equals(substring(body('Validate_list_attachments_request')?['requestId'], 14, 1), '4'), contains('89ab', toLower(substring(body('Validate_list_attachments_request')?['requestId'], 19, 1))))",
+                "content": "@and(equals(length(toLower(replace(body('Validate_list_attachments_request')?['requestId'], '-', string(null)))), 32), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(replace(body('Validate_list_attachments_request')?['requestId'], '-', string(null))), '0', string(null)), '1', string(null)), '2', string(null)), '3', string(null)), '4', string(null)), '5', string(null)), '6', string(null)), '7', string(null)), '8', string(null)), '9', string(null)), 'a', string(null)), 'b', string(null)), 'c', string(null)), 'd', string(null)), 'e', string(null)), 'f', string(null)), string(null)), equals(substring(body('Validate_list_attachments_request')?['requestId'], 8, 1), '-'), equals(substring(body('Validate_list_attachments_request')?['requestId'], 13, 1), '-'), equals(substring(body('Validate_list_attachments_request')?['requestId'], 18, 1), '-'), equals(substring(body('Validate_list_attachments_request')?['requestId'], 23, 1), '-'), equals(substring(body('Validate_list_attachments_request')?['requestId'], 14, 1), '4'), contains('89ab', toLower(substring(body('Validate_list_attachments_request')?['requestId'], 19, 1))))",
                 "schema": {
                   "type": "boolean",
                   "enum": [
@@ -1414,7 +1417,7 @@
                 ]
               },
               "inputs": {
-                "content": "@and(not(equals(body('Validate_list_attachments_args')?['messageId'], '.')), not(equals(body('Validate_list_attachments_args')?['messageId'], '..')), equals(length(uriComponent(body('Validate_list_attachments_args')?['messageId'])), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(body('Validate_list_attachments_args')?['messageId']), '%0', ''), '%1', ''), '%20', ''), '%7F', ''), '%C2%85', ''), '%C2%A0', ''), '%E1%9A%80', ''), '%E2%80%80', ''), '%E2%80%81', ''), '%E2%80%82', ''), '%E2%80%83', ''), '%E2%80%84', ''), '%E2%80%85', ''), '%E2%80%86', ''), '%E2%80%87', ''), '%E2%80%88', ''), '%E2%80%89', ''), '%E2%80%8A', ''), '%E2%80%A8', ''), '%E2%80%A9', ''), '%E2%80%AF', ''), '%E2%81%9F', ''), '%E3%80%80', ''), '%EF%BB%BF', ''))))",
+                "content": "@and(not(equals(body('Validate_list_attachments_args')?['messageId'], '.')), not(equals(body('Validate_list_attachments_args')?['messageId'], '..')), equals(length(uriComponent(body('Validate_list_attachments_args')?['messageId'])), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(body('Validate_list_attachments_args')?['messageId']), '%0', string(null)), '%1', string(null)), '%20', string(null)), '%7F', string(null)), '%C2%85', string(null)), '%C2%A0', string(null)), '%E1%9A%80', string(null)), '%E2%80%80', string(null)), '%E2%80%81', string(null)), '%E2%80%82', string(null)), '%E2%80%83', string(null)), '%E2%80%84', string(null)), '%E2%80%85', string(null)), '%E2%80%86', string(null)), '%E2%80%87', string(null)), '%E2%80%88', string(null)), '%E2%80%89', string(null)), '%E2%80%8A', string(null)), '%E2%80%A8', string(null)), '%E2%80%A9', string(null)), '%E2%80%AF', string(null)), '%E2%81%9F', string(null)), '%E3%80%80', string(null)), '%EF%BB%BF', string(null)))))",
                 "schema": {
                   "type": "boolean",
                   "enum": [
@@ -1638,7 +1641,7 @@
                 "from": "@body('Validate_attachment_list')?['value']",
                 "select": {
                   "@@odata.type": "@item()?['@odata.type']",
-                  "id": "@if(and(not(equals(item()?['id'], '.')), not(equals(item()?['id'], '..')), equals(length(uriComponent(item()?['id'])), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(item()?['id']), '%0', ''), '%1', ''), '%20', ''), '%7F', ''), '%C2%85', ''), '%C2%A0', ''), '%E1%9A%80', ''), '%E2%80%80', ''), '%E2%80%81', ''), '%E2%80%82', ''), '%E2%80%83', ''), '%E2%80%84', ''), '%E2%80%85', ''), '%E2%80%86', ''), '%E2%80%87', ''), '%E2%80%88', ''), '%E2%80%89', ''), '%E2%80%8A', ''), '%E2%80%A8', ''), '%E2%80%A9', ''), '%E2%80%AF', ''), '%E2%81%9F', ''), '%E3%80%80', ''), '%EF%BB%BF', '')))), item()?['id'], null)",
+                  "id": "@if(and(not(equals(item()?['id'], '.')), not(equals(item()?['id'], '..')), equals(length(uriComponent(item()?['id'])), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(item()?['id']), '%0', string(null)), '%1', string(null)), '%20', string(null)), '%7F', string(null)), '%C2%85', string(null)), '%C2%A0', string(null)), '%E1%9A%80', string(null)), '%E2%80%80', string(null)), '%E2%80%81', string(null)), '%E2%80%82', string(null)), '%E2%80%83', string(null)), '%E2%80%84', string(null)), '%E2%80%85', string(null)), '%E2%80%86', string(null)), '%E2%80%87', string(null)), '%E2%80%88', string(null)), '%E2%80%89', string(null)), '%E2%80%8A', string(null)), '%E2%80%A8', string(null)), '%E2%80%A9', string(null)), '%E2%80%AF', string(null)), '%E2%81%9F', string(null)), '%E3%80%80', string(null)), '%EF%BB%BF', string(null))))), item()?['id'], null)",
                   "name": "@item()?['name']",
                   "contentType": "@item()?['contentType']",
                   "size": "@item()?['size']",
@@ -1796,7 +1799,7 @@
                   "operation": "@triggerBody()?['operation']",
                   "data": {
                     "value": "@body('Select_attachment_metadata')",
-                    "@@odata.nextLink": "@coalesce(body('Validate_attachment_list')?['@odata.nextLink'], '')"
+                    "@@odata.nextLink": "@coalesce(body('Validate_attachment_list')?['@odata.nextLink'], string(null))"
                   }
                 }
               },
@@ -1891,7 +1894,7 @@
                 ]
               },
               "inputs": {
-                "content": "@and(equals(length(toLower(replace(body('Validate_get_attachment_request')?['requestId'], '-', ''))), 32), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(replace(body('Validate_get_attachment_request')?['requestId'], '-', '')), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), 'a', ''), 'b', ''), 'c', ''), 'd', ''), 'e', ''), 'f', ''), ''), equals(substring(body('Validate_get_attachment_request')?['requestId'], 8, 1), '-'), equals(substring(body('Validate_get_attachment_request')?['requestId'], 13, 1), '-'), equals(substring(body('Validate_get_attachment_request')?['requestId'], 18, 1), '-'), equals(substring(body('Validate_get_attachment_request')?['requestId'], 23, 1), '-'), equals(substring(body('Validate_get_attachment_request')?['requestId'], 14, 1), '4'), contains('89ab', toLower(substring(body('Validate_get_attachment_request')?['requestId'], 19, 1))))",
+                "content": "@and(equals(length(toLower(replace(body('Validate_get_attachment_request')?['requestId'], '-', string(null)))), 32), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(replace(body('Validate_get_attachment_request')?['requestId'], '-', string(null))), '0', string(null)), '1', string(null)), '2', string(null)), '3', string(null)), '4', string(null)), '5', string(null)), '6', string(null)), '7', string(null)), '8', string(null)), '9', string(null)), 'a', string(null)), 'b', string(null)), 'c', string(null)), 'd', string(null)), 'e', string(null)), 'f', string(null)), string(null)), equals(substring(body('Validate_get_attachment_request')?['requestId'], 8, 1), '-'), equals(substring(body('Validate_get_attachment_request')?['requestId'], 13, 1), '-'), equals(substring(body('Validate_get_attachment_request')?['requestId'], 18, 1), '-'), equals(substring(body('Validate_get_attachment_request')?['requestId'], 23, 1), '-'), equals(substring(body('Validate_get_attachment_request')?['requestId'], 14, 1), '4'), contains('89ab', toLower(substring(body('Validate_get_attachment_request')?['requestId'], 19, 1))))",
                 "schema": {
                   "type": "boolean",
                   "enum": [
@@ -2015,7 +2018,7 @@
                 ]
               },
               "inputs": {
-                "content": "@and(and(not(equals(body('Validate_get_attachment_args')?['messageId'], '.')), not(equals(body('Validate_get_attachment_args')?['messageId'], '..')), equals(length(uriComponent(body('Validate_get_attachment_args')?['messageId'])), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(body('Validate_get_attachment_args')?['messageId']), '%0', ''), '%1', ''), '%20', ''), '%7F', ''), '%C2%85', ''), '%C2%A0', ''), '%E1%9A%80', ''), '%E2%80%80', ''), '%E2%80%81', ''), '%E2%80%82', ''), '%E2%80%83', ''), '%E2%80%84', ''), '%E2%80%85', ''), '%E2%80%86', ''), '%E2%80%87', ''), '%E2%80%88', ''), '%E2%80%89', ''), '%E2%80%8A', ''), '%E2%80%A8', ''), '%E2%80%A9', ''), '%E2%80%AF', ''), '%E2%81%9F', ''), '%E3%80%80', ''), '%EF%BB%BF', '')))), and(not(equals(body('Validate_get_attachment_args')?['attachmentId'], '.')), not(equals(body('Validate_get_attachment_args')?['attachmentId'], '..')), equals(length(uriComponent(body('Validate_get_attachment_args')?['attachmentId'])), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(body('Validate_get_attachment_args')?['attachmentId']), '%0', ''), '%1', ''), '%20', ''), '%7F', ''), '%C2%85', ''), '%C2%A0', ''), '%E1%9A%80', ''), '%E2%80%80', ''), '%E2%80%81', ''), '%E2%80%82', ''), '%E2%80%83', ''), '%E2%80%84', ''), '%E2%80%85', ''), '%E2%80%86', ''), '%E2%80%87', ''), '%E2%80%88', ''), '%E2%80%89', ''), '%E2%80%8A', ''), '%E2%80%A8', ''), '%E2%80%A9', ''), '%E2%80%AF', ''), '%E2%81%9F', ''), '%E3%80%80', ''), '%EF%BB%BF', '')))))",
+                "content": "@and(and(not(equals(body('Validate_get_attachment_args')?['messageId'], '.')), not(equals(body('Validate_get_attachment_args')?['messageId'], '..')), equals(length(uriComponent(body('Validate_get_attachment_args')?['messageId'])), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(body('Validate_get_attachment_args')?['messageId']), '%0', string(null)), '%1', string(null)), '%20', string(null)), '%7F', string(null)), '%C2%85', string(null)), '%C2%A0', string(null)), '%E1%9A%80', string(null)), '%E2%80%80', string(null)), '%E2%80%81', string(null)), '%E2%80%82', string(null)), '%E2%80%83', string(null)), '%E2%80%84', string(null)), '%E2%80%85', string(null)), '%E2%80%86', string(null)), '%E2%80%87', string(null)), '%E2%80%88', string(null)), '%E2%80%89', string(null)), '%E2%80%8A', string(null)), '%E2%80%A8', string(null)), '%E2%80%A9', string(null)), '%E2%80%AF', string(null)), '%E2%81%9F', string(null)), '%E3%80%80', string(null)), '%EF%BB%BF', string(null))))), and(not(equals(body('Validate_get_attachment_args')?['attachmentId'], '.')), not(equals(body('Validate_get_attachment_args')?['attachmentId'], '..')), equals(length(uriComponent(body('Validate_get_attachment_args')?['attachmentId'])), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(body('Validate_get_attachment_args')?['attachmentId']), '%0', string(null)), '%1', string(null)), '%20', string(null)), '%7F', string(null)), '%C2%85', string(null)), '%C2%A0', string(null)), '%E1%9A%80', string(null)), '%E2%80%80', string(null)), '%E2%80%81', string(null)), '%E2%80%82', string(null)), '%E2%80%83', string(null)), '%E2%80%84', string(null)), '%E2%80%85', string(null)), '%E2%80%86', string(null)), '%E2%80%87', string(null)), '%E2%80%88', string(null)), '%E2%80%89', string(null)), '%E2%80%8A', string(null)), '%E2%80%A8', string(null)), '%E2%80%A9', string(null)), '%E2%80%AF', string(null)), '%E2%81%9F', string(null)), '%E3%80%80', string(null)), '%EF%BB%BF', string(null))))))",
                 "schema": {
                   "type": "boolean",
                   "enum": [
@@ -2793,7 +2796,7 @@
                 ]
               },
               "inputs": {
-                "content": "@and(equals(length(toLower(replace(body('Validate_list_mail_folders_request')?['requestId'], '-', ''))), 32), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(replace(body('Validate_list_mail_folders_request')?['requestId'], '-', '')), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), 'a', ''), 'b', ''), 'c', ''), 'd', ''), 'e', ''), 'f', ''), ''), equals(substring(body('Validate_list_mail_folders_request')?['requestId'], 8, 1), '-'), equals(substring(body('Validate_list_mail_folders_request')?['requestId'], 13, 1), '-'), equals(substring(body('Validate_list_mail_folders_request')?['requestId'], 18, 1), '-'), equals(substring(body('Validate_list_mail_folders_request')?['requestId'], 23, 1), '-'), equals(substring(body('Validate_list_mail_folders_request')?['requestId'], 14, 1), '4'), contains('89ab', toLower(substring(body('Validate_list_mail_folders_request')?['requestId'], 19, 1))))",
+                "content": "@and(equals(length(toLower(replace(body('Validate_list_mail_folders_request')?['requestId'], '-', string(null)))), 32), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(replace(body('Validate_list_mail_folders_request')?['requestId'], '-', string(null))), '0', string(null)), '1', string(null)), '2', string(null)), '3', string(null)), '4', string(null)), '5', string(null)), '6', string(null)), '7', string(null)), '8', string(null)), '9', string(null)), 'a', string(null)), 'b', string(null)), 'c', string(null)), 'd', string(null)), 'e', string(null)), 'f', string(null)), string(null)), equals(substring(body('Validate_list_mail_folders_request')?['requestId'], 8, 1), '-'), equals(substring(body('Validate_list_mail_folders_request')?['requestId'], 13, 1), '-'), equals(substring(body('Validate_list_mail_folders_request')?['requestId'], 18, 1), '-'), equals(substring(body('Validate_list_mail_folders_request')?['requestId'], 23, 1), '-'), equals(substring(body('Validate_list_mail_folders_request')?['requestId'], 14, 1), '4'), contains('89ab', toLower(substring(body('Validate_list_mail_folders_request')?['requestId'], 19, 1))))",
                 "schema": {
                   "type": "boolean",
                   "enum": [
@@ -3134,7 +3137,7 @@
                 ]
               },
               "inputs": {
-                "content": "@and(equals(length(toLower(replace(body('Validate_get_conversation_request')?['requestId'], '-', ''))), 32), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(replace(body('Validate_get_conversation_request')?['requestId'], '-', '')), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), 'a', ''), 'b', ''), 'c', ''), 'd', ''), 'e', ''), 'f', ''), ''), equals(substring(body('Validate_get_conversation_request')?['requestId'], 8, 1), '-'), equals(substring(body('Validate_get_conversation_request')?['requestId'], 13, 1), '-'), equals(substring(body('Validate_get_conversation_request')?['requestId'], 18, 1), '-'), equals(substring(body('Validate_get_conversation_request')?['requestId'], 23, 1), '-'), equals(substring(body('Validate_get_conversation_request')?['requestId'], 14, 1), '4'), contains('89ab', toLower(substring(body('Validate_get_conversation_request')?['requestId'], 19, 1))))",
+                "content": "@and(equals(length(toLower(replace(body('Validate_get_conversation_request')?['requestId'], '-', string(null)))), 32), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(replace(body('Validate_get_conversation_request')?['requestId'], '-', string(null))), '0', string(null)), '1', string(null)), '2', string(null)), '3', string(null)), '4', string(null)), '5', string(null)), '6', string(null)), '7', string(null)), '8', string(null)), '9', string(null)), 'a', string(null)), 'b', string(null)), 'c', string(null)), 'd', string(null)), 'e', string(null)), 'f', string(null)), string(null)), equals(substring(body('Validate_get_conversation_request')?['requestId'], 8, 1), '-'), equals(substring(body('Validate_get_conversation_request')?['requestId'], 13, 1), '-'), equals(substring(body('Validate_get_conversation_request')?['requestId'], 18, 1), '-'), equals(substring(body('Validate_get_conversation_request')?['requestId'], 23, 1), '-'), equals(substring(body('Validate_get_conversation_request')?['requestId'], 14, 1), '4'), contains('89ab', toLower(substring(body('Validate_get_conversation_request')?['requestId'], 19, 1))))",
                 "schema": {
                   "type": "boolean",
                   "enum": [
@@ -3263,7 +3266,7 @@
                 ]
               },
               "inputs": {
-                "content": "@and(not(equals(coalesce(body('Validate_get_conversation_args')?['conversationId'], 'unused'), '.')), not(equals(coalesce(body('Validate_get_conversation_args')?['conversationId'], 'unused'), '..')), equals(length(uriComponent(coalesce(body('Validate_get_conversation_args')?['conversationId'], 'unused'))), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(coalesce(body('Validate_get_conversation_args')?['conversationId'], 'unused')), '%0', ''), '%1', ''), '%20', ''), '%7F', ''), '%C2%85', ''), '%C2%A0', ''), '%E1%9A%80', ''), '%E2%80%80', ''), '%E2%80%81', ''), '%E2%80%82', ''), '%E2%80%83', ''), '%E2%80%84', ''), '%E2%80%85', ''), '%E2%80%86', ''), '%E2%80%87', ''), '%E2%80%88', ''), '%E2%80%89', ''), '%E2%80%8A', ''), '%E2%80%A8', ''), '%E2%80%A9', ''), '%E2%80%AF', ''), '%E2%81%9F', ''), '%E3%80%80', ''), '%EF%BB%BF', ''))))",
+                "content": "@and(not(equals(coalesce(body('Validate_get_conversation_args')?['conversationId'], 'unused'), '.')), not(equals(coalesce(body('Validate_get_conversation_args')?['conversationId'], 'unused'), '..')), equals(length(uriComponent(coalesce(body('Validate_get_conversation_args')?['conversationId'], 'unused'))), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(coalesce(body('Validate_get_conversation_args')?['conversationId'], 'unused')), '%0', string(null)), '%1', string(null)), '%20', string(null)), '%7F', string(null)), '%C2%85', string(null)), '%C2%A0', string(null)), '%E1%9A%80', string(null)), '%E2%80%80', string(null)), '%E2%80%81', string(null)), '%E2%80%82', string(null)), '%E2%80%83', string(null)), '%E2%80%84', string(null)), '%E2%80%85', string(null)), '%E2%80%86', string(null)), '%E2%80%87', string(null)), '%E2%80%88', string(null)), '%E2%80%89', string(null)), '%E2%80%8A', string(null)), '%E2%80%A8', string(null)), '%E2%80%A9', string(null)), '%E2%80%AF', string(null)), '%E2%81%9F', string(null)), '%E3%80%80', string(null)), '%EF%BB%BF', string(null)))))",
                 "schema": {
                   "type": "boolean",
                   "enum": [
@@ -3487,7 +3490,7 @@
                 ]
               },
               "inputs": {
-                "content": "@and(equals(length(toLower(replace(body('Validate_onedrive_search_files_request')?['requestId'], '-', ''))), 32), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(replace(body('Validate_onedrive_search_files_request')?['requestId'], '-', '')), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), 'a', ''), 'b', ''), 'c', ''), 'd', ''), 'e', ''), 'f', ''), ''), equals(substring(body('Validate_onedrive_search_files_request')?['requestId'], 8, 1), '-'), equals(substring(body('Validate_onedrive_search_files_request')?['requestId'], 13, 1), '-'), equals(substring(body('Validate_onedrive_search_files_request')?['requestId'], 18, 1), '-'), equals(substring(body('Validate_onedrive_search_files_request')?['requestId'], 23, 1), '-'), equals(substring(body('Validate_onedrive_search_files_request')?['requestId'], 14, 1), '4'), contains('89ab', toLower(substring(body('Validate_onedrive_search_files_request')?['requestId'], 19, 1))))",
+                "content": "@and(equals(length(toLower(replace(body('Validate_onedrive_search_files_request')?['requestId'], '-', string(null)))), 32), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(replace(body('Validate_onedrive_search_files_request')?['requestId'], '-', string(null))), '0', string(null)), '1', string(null)), '2', string(null)), '3', string(null)), '4', string(null)), '5', string(null)), '6', string(null)), '7', string(null)), '8', string(null)), '9', string(null)), 'a', string(null)), 'b', string(null)), 'c', string(null)), 'd', string(null)), 'e', string(null)), 'f', string(null)), string(null)), equals(substring(body('Validate_onedrive_search_files_request')?['requestId'], 8, 1), '-'), equals(substring(body('Validate_onedrive_search_files_request')?['requestId'], 13, 1), '-'), equals(substring(body('Validate_onedrive_search_files_request')?['requestId'], 18, 1), '-'), equals(substring(body('Validate_onedrive_search_files_request')?['requestId'], 23, 1), '-'), equals(substring(body('Validate_onedrive_search_files_request')?['requestId'], 14, 1), '4'), contains('89ab', toLower(substring(body('Validate_onedrive_search_files_request')?['requestId'], 19, 1))))",
                 "schema": {
                   "type": "boolean",
                   "enum": [
@@ -4098,7 +4101,7 @@
                 ]
               },
               "inputs": {
-                "content": "@and(equals(length(toLower(replace(body('Validate_onedrive_list_folder_request')?['requestId'], '-', ''))), 32), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(replace(body('Validate_onedrive_list_folder_request')?['requestId'], '-', '')), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), 'a', ''), 'b', ''), 'c', ''), 'd', ''), 'e', ''), 'f', ''), ''), equals(substring(body('Validate_onedrive_list_folder_request')?['requestId'], 8, 1), '-'), equals(substring(body('Validate_onedrive_list_folder_request')?['requestId'], 13, 1), '-'), equals(substring(body('Validate_onedrive_list_folder_request')?['requestId'], 18, 1), '-'), equals(substring(body('Validate_onedrive_list_folder_request')?['requestId'], 23, 1), '-'), equals(substring(body('Validate_onedrive_list_folder_request')?['requestId'], 14, 1), '4'), contains('89ab', toLower(substring(body('Validate_onedrive_list_folder_request')?['requestId'], 19, 1))))",
+                "content": "@and(equals(length(toLower(replace(body('Validate_onedrive_list_folder_request')?['requestId'], '-', string(null)))), 32), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(replace(body('Validate_onedrive_list_folder_request')?['requestId'], '-', string(null))), '0', string(null)), '1', string(null)), '2', string(null)), '3', string(null)), '4', string(null)), '5', string(null)), '6', string(null)), '7', string(null)), '8', string(null)), '9', string(null)), 'a', string(null)), 'b', string(null)), 'c', string(null)), 'd', string(null)), 'e', string(null)), 'f', string(null)), string(null)), equals(substring(body('Validate_onedrive_list_folder_request')?['requestId'], 8, 1), '-'), equals(substring(body('Validate_onedrive_list_folder_request')?['requestId'], 13, 1), '-'), equals(substring(body('Validate_onedrive_list_folder_request')?['requestId'], 18, 1), '-'), equals(substring(body('Validate_onedrive_list_folder_request')?['requestId'], 23, 1), '-'), equals(substring(body('Validate_onedrive_list_folder_request')?['requestId'], 14, 1), '4'), contains('89ab', toLower(substring(body('Validate_onedrive_list_folder_request')?['requestId'], 19, 1))))",
                 "schema": {
                   "type": "boolean",
                   "enum": [
@@ -4165,7 +4168,7 @@
                     "top": {
                       "type": "integer",
                       "minimum": 1,
-                      "maximum": 100
+                      "maximum": 1000
                     }
                   },
                   "required": [
@@ -4221,7 +4224,7 @@
                 ]
               },
               "inputs": {
-                "content": "@and(not(equals(coalesce(body('Validate_onedrive_list_folder_args')?['folderId'], 'unused'), '.')), not(equals(coalesce(body('Validate_onedrive_list_folder_args')?['folderId'], 'unused'), '..')), equals(length(uriComponent(coalesce(body('Validate_onedrive_list_folder_args')?['folderId'], 'unused'))), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(coalesce(body('Validate_onedrive_list_folder_args')?['folderId'], 'unused')), '%0', ''), '%1', ''), '%20', ''), '%7F', ''), '%C2%85', ''), '%C2%A0', ''), '%E1%9A%80', ''), '%E2%80%80', ''), '%E2%80%81', ''), '%E2%80%82', ''), '%E2%80%83', ''), '%E2%80%84', ''), '%E2%80%85', ''), '%E2%80%86', ''), '%E2%80%87', ''), '%E2%80%88', ''), '%E2%80%89', ''), '%E2%80%8A', ''), '%E2%80%A8', ''), '%E2%80%A9', ''), '%E2%80%AF', ''), '%E2%81%9F', ''), '%E3%80%80', ''), '%EF%BB%BF', ''))))",
+                "content": "@and(not(equals(coalesce(body('Validate_onedrive_list_folder_args')?['folderId'], 'unused'), '.')), not(equals(coalesce(body('Validate_onedrive_list_folder_args')?['folderId'], 'unused'), '..')), equals(length(uriComponent(coalesce(body('Validate_onedrive_list_folder_args')?['folderId'], 'unused'))), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(coalesce(body('Validate_onedrive_list_folder_args')?['folderId'], 'unused')), '%0', string(null)), '%1', string(null)), '%20', string(null)), '%7F', string(null)), '%C2%85', string(null)), '%C2%A0', string(null)), '%E1%9A%80', string(null)), '%E2%80%80', string(null)), '%E2%80%81', string(null)), '%E2%80%82', string(null)), '%E2%80%83', string(null)), '%E2%80%84', string(null)), '%E2%80%85', string(null)), '%E2%80%86', string(null)), '%E2%80%87', string(null)), '%E2%80%88', string(null)), '%E2%80%89', string(null)), '%E2%80%8A', string(null)), '%E2%80%A8', string(null)), '%E2%80%A9', string(null)), '%E2%80%AF', string(null)), '%E2%81%9F', string(null)), '%E3%80%80', string(null)), '%EF%BB%BF', string(null)))))",
                 "schema": {
                   "type": "boolean",
                   "enum": [
@@ -4340,7 +4343,7 @@
                     ]
                   },
                   "inputs": {
-                    "from": "@take(body('OneDrive_list_root'), body('Validate_onedrive_list_folder_args')?['top'])",
+                    "from": "@take(take(body('OneDrive_list_root'), 1000), body('Validate_onedrive_list_folder_args')?['top'])",
                     "select": {
                       "Id": "@item()?['Id']",
                       "Name": "@item()?['Name']",
@@ -4402,7 +4405,7 @@
                     "content": "@body('Select_onedrive_root_folder')",
                     "schema": {
                       "type": "array",
-                      "maxItems": 100,
+                      "maxItems": 1000,
                       "items": {
                         "type": "object",
                         "properties": {
@@ -4539,7 +4542,7 @@
                       "operation": "@triggerBody()?['operation']",
                       "data": {
                         "value": "@body('Validate_onedrive_root_folder')",
-                        "truncated": "@greater(length(body('OneDrive_list_root')), body('Validate_onedrive_list_folder_args')?['top'])"
+                        "truncated": "@or(greaterOrEquals(length(body('OneDrive_list_root')), 1000), greater(length(body('OneDrive_list_root')), body('Validate_onedrive_list_folder_args')?['top']))"
                       }
                     }
                   },
@@ -4577,6 +4580,9 @@
                           "inputs",
                           "outputs"
                         ]
+                      },
+                      "paginationPolicy": {
+                        "minimumItemCount": 1000
                       }
                     }
                   },
@@ -4619,7 +4625,7 @@
                       ]
                     },
                     "inputs": {
-                      "from": "@take(body('OneDrive_list_folder_v2')?['value'], body('Validate_onedrive_list_folder_args')?['top'])",
+                      "from": "@take(take(body('OneDrive_list_folder_v2')?['value'], 1000), body('Validate_onedrive_list_folder_args')?['top'])",
                       "select": {
                         "Id": "@item()?['Id']",
                         "Name": "@item()?['Name']",
@@ -4681,7 +4687,7 @@
                       "content": "@body('Select_onedrive_list_folder')",
                       "schema": {
                         "type": "array",
-                        "maxItems": 100,
+                        "maxItems": 1000,
                         "items": {
                           "type": "object",
                           "properties": {
@@ -4818,7 +4824,7 @@
                         "operation": "@triggerBody()?['operation']",
                         "data": {
                           "value": "@body('Validate_onedrive_list_folder')",
-                          "truncated": "@or(greater(length(body('OneDrive_list_folder_v2')?['value']), body('Validate_onedrive_list_folder_args')?['top']), not(empty(body('OneDrive_list_folder_v2')?['nextLink'])))"
+                          "truncated": "@or(greaterOrEquals(length(body('OneDrive_list_folder_v2')?['value']), 1000), greater(length(body('OneDrive_list_folder_v2')?['value']), body('Validate_onedrive_list_folder_args')?['top']), not(empty(body('OneDrive_list_folder_v2')?['nextLink'])))"
                         }
                       }
                     },
@@ -4921,7 +4927,7 @@
                 ]
               },
               "inputs": {
-                "content": "@and(equals(length(toLower(replace(body('Validate_onedrive_get_metadata_request')?['requestId'], '-', ''))), 32), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(replace(body('Validate_onedrive_get_metadata_request')?['requestId'], '-', '')), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), 'a', ''), 'b', ''), 'c', ''), 'd', ''), 'e', ''), 'f', ''), ''), equals(substring(body('Validate_onedrive_get_metadata_request')?['requestId'], 8, 1), '-'), equals(substring(body('Validate_onedrive_get_metadata_request')?['requestId'], 13, 1), '-'), equals(substring(body('Validate_onedrive_get_metadata_request')?['requestId'], 18, 1), '-'), equals(substring(body('Validate_onedrive_get_metadata_request')?['requestId'], 23, 1), '-'), equals(substring(body('Validate_onedrive_get_metadata_request')?['requestId'], 14, 1), '4'), contains('89ab', toLower(substring(body('Validate_onedrive_get_metadata_request')?['requestId'], 19, 1))))",
+                "content": "@and(equals(length(toLower(replace(body('Validate_onedrive_get_metadata_request')?['requestId'], '-', string(null)))), 32), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(replace(body('Validate_onedrive_get_metadata_request')?['requestId'], '-', string(null))), '0', string(null)), '1', string(null)), '2', string(null)), '3', string(null)), '4', string(null)), '5', string(null)), '6', string(null)), '7', string(null)), '8', string(null)), '9', string(null)), 'a', string(null)), 'b', string(null)), 'c', string(null)), 'd', string(null)), 'e', string(null)), 'f', string(null)), string(null)), equals(substring(body('Validate_onedrive_get_metadata_request')?['requestId'], 8, 1), '-'), equals(substring(body('Validate_onedrive_get_metadata_request')?['requestId'], 13, 1), '-'), equals(substring(body('Validate_onedrive_get_metadata_request')?['requestId'], 18, 1), '-'), equals(substring(body('Validate_onedrive_get_metadata_request')?['requestId'], 23, 1), '-'), equals(substring(body('Validate_onedrive_get_metadata_request')?['requestId'], 14, 1), '4'), contains('89ab', toLower(substring(body('Validate_onedrive_get_metadata_request')?['requestId'], 19, 1))))",
                 "schema": {
                   "type": "boolean",
                   "enum": [
@@ -5039,7 +5045,7 @@
                 ]
               },
               "inputs": {
-                "content": "@and(not(equals(coalesce(body('Validate_onedrive_get_metadata_args')?['fileId'], 'unused'), '.')), not(equals(coalesce(body('Validate_onedrive_get_metadata_args')?['fileId'], 'unused'), '..')), equals(length(uriComponent(coalesce(body('Validate_onedrive_get_metadata_args')?['fileId'], 'unused'))), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(coalesce(body('Validate_onedrive_get_metadata_args')?['fileId'], 'unused')), '%0', ''), '%1', ''), '%20', ''), '%7F', ''), '%C2%85', ''), '%C2%A0', ''), '%E1%9A%80', ''), '%E2%80%80', ''), '%E2%80%81', ''), '%E2%80%82', ''), '%E2%80%83', ''), '%E2%80%84', ''), '%E2%80%85', ''), '%E2%80%86', ''), '%E2%80%87', ''), '%E2%80%88', ''), '%E2%80%89', ''), '%E2%80%8A', ''), '%E2%80%A8', ''), '%E2%80%A9', ''), '%E2%80%AF', ''), '%E2%81%9F', ''), '%E3%80%80', ''), '%EF%BB%BF', ''))))",
+                "content": "@and(not(equals(coalesce(body('Validate_onedrive_get_metadata_args')?['fileId'], 'unused'), '.')), not(equals(coalesce(body('Validate_onedrive_get_metadata_args')?['fileId'], 'unused'), '..')), equals(length(uriComponent(coalesce(body('Validate_onedrive_get_metadata_args')?['fileId'], 'unused'))), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(coalesce(body('Validate_onedrive_get_metadata_args')?['fileId'], 'unused')), '%0', string(null)), '%1', string(null)), '%20', string(null)), '%7F', string(null)), '%C2%85', string(null)), '%C2%A0', string(null)), '%E1%9A%80', string(null)), '%E2%80%80', string(null)), '%E2%80%81', string(null)), '%E2%80%82', string(null)), '%E2%80%83', string(null)), '%E2%80%84', string(null)), '%E2%80%85', string(null)), '%E2%80%86', string(null)), '%E2%80%87', string(null)), '%E2%80%88', string(null)), '%E2%80%89', string(null)), '%E2%80%8A', string(null)), '%E2%80%A8', string(null)), '%E2%80%A9', string(null)), '%E2%80%AF', string(null)), '%E2%81%9F', string(null)), '%E3%80%80', string(null)), '%EF%BB%BF', string(null)))))",
                 "schema": {
                   "type": "boolean",
                   "enum": [
@@ -5433,7 +5439,7 @@
                 ]
               },
               "inputs": {
-                "content": "@and(equals(length(toLower(replace(body('Validate_onedrive_get_content_request')?['requestId'], '-', ''))), 32), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(replace(body('Validate_onedrive_get_content_request')?['requestId'], '-', '')), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), 'a', ''), 'b', ''), 'c', ''), 'd', ''), 'e', ''), 'f', ''), ''), equals(substring(body('Validate_onedrive_get_content_request')?['requestId'], 8, 1), '-'), equals(substring(body('Validate_onedrive_get_content_request')?['requestId'], 13, 1), '-'), equals(substring(body('Validate_onedrive_get_content_request')?['requestId'], 18, 1), '-'), equals(substring(body('Validate_onedrive_get_content_request')?['requestId'], 23, 1), '-'), equals(substring(body('Validate_onedrive_get_content_request')?['requestId'], 14, 1), '4'), contains('89ab', toLower(substring(body('Validate_onedrive_get_content_request')?['requestId'], 19, 1))))",
+                "content": "@and(equals(length(toLower(replace(body('Validate_onedrive_get_content_request')?['requestId'], '-', string(null)))), 32), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(replace(body('Validate_onedrive_get_content_request')?['requestId'], '-', string(null))), '0', string(null)), '1', string(null)), '2', string(null)), '3', string(null)), '4', string(null)), '5', string(null)), '6', string(null)), '7', string(null)), '8', string(null)), '9', string(null)), 'a', string(null)), 'b', string(null)), 'c', string(null)), 'd', string(null)), 'e', string(null)), 'f', string(null)), string(null)), equals(substring(body('Validate_onedrive_get_content_request')?['requestId'], 8, 1), '-'), equals(substring(body('Validate_onedrive_get_content_request')?['requestId'], 13, 1), '-'), equals(substring(body('Validate_onedrive_get_content_request')?['requestId'], 18, 1), '-'), equals(substring(body('Validate_onedrive_get_content_request')?['requestId'], 23, 1), '-'), equals(substring(body('Validate_onedrive_get_content_request')?['requestId'], 14, 1), '4'), contains('89ab', toLower(substring(body('Validate_onedrive_get_content_request')?['requestId'], 19, 1))))",
                 "schema": {
                   "type": "boolean",
                   "enum": [
@@ -5551,7 +5557,7 @@
                 ]
               },
               "inputs": {
-                "content": "@and(not(equals(coalesce(body('Validate_onedrive_get_content_args')?['fileId'], 'unused'), '.')), not(equals(coalesce(body('Validate_onedrive_get_content_args')?['fileId'], 'unused'), '..')), equals(length(uriComponent(coalesce(body('Validate_onedrive_get_content_args')?['fileId'], 'unused'))), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(coalesce(body('Validate_onedrive_get_content_args')?['fileId'], 'unused')), '%0', ''), '%1', ''), '%20', ''), '%7F', ''), '%C2%85', ''), '%C2%A0', ''), '%E1%9A%80', ''), '%E2%80%80', ''), '%E2%80%81', ''), '%E2%80%82', ''), '%E2%80%83', ''), '%E2%80%84', ''), '%E2%80%85', ''), '%E2%80%86', ''), '%E2%80%87', ''), '%E2%80%88', ''), '%E2%80%89', ''), '%E2%80%8A', ''), '%E2%80%A8', ''), '%E2%80%A9', ''), '%E2%80%AF', ''), '%E2%81%9F', ''), '%E3%80%80', ''), '%EF%BB%BF', ''))))",
+                "content": "@and(not(equals(coalesce(body('Validate_onedrive_get_content_args')?['fileId'], 'unused'), '.')), not(equals(coalesce(body('Validate_onedrive_get_content_args')?['fileId'], 'unused'), '..')), equals(length(uriComponent(coalesce(body('Validate_onedrive_get_content_args')?['fileId'], 'unused'))), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(coalesce(body('Validate_onedrive_get_content_args')?['fileId'], 'unused')), '%0', string(null)), '%1', string(null)), '%20', string(null)), '%7F', string(null)), '%C2%85', string(null)), '%C2%A0', string(null)), '%E1%9A%80', string(null)), '%E2%80%80', string(null)), '%E2%80%81', string(null)), '%E2%80%82', string(null)), '%E2%80%83', string(null)), '%E2%80%84', string(null)), '%E2%80%85', string(null)), '%E2%80%86', string(null)), '%E2%80%87', string(null)), '%E2%80%88', string(null)), '%E2%80%89', string(null)), '%E2%80%8A', string(null)), '%E2%80%A8', string(null)), '%E2%80%A9', string(null)), '%E2%80%AF', string(null)), '%E2%81%9F', string(null)), '%E3%80%80', string(null)), '%EF%BB%BF', string(null)))))",
                 "schema": {
                   "type": "boolean",
                   "enum": [
@@ -5821,7 +5827,7 @@
                       "type": "If",
                       "expression": {
                         "equals": [
-                          "@or(and(endsWith(toLower(body('Validate_onedrive_content_metadata')?['Name']), '.pdf'), or(or(equals(toLower(trim(first(split(body('Validate_onedrive_content_metadata')?['MediaType'], ';')))), ''), equals(toLower(trim(first(split(body('Validate_onedrive_content_metadata')?['MediaType'], ';')))), 'application/octet-stream')), equals(toLower(trim(first(split(body('Validate_onedrive_content_metadata')?['MediaType'], ';')))), 'application/pdf'))), and(endsWith(toLower(body('Validate_onedrive_content_metadata')?['Name']), '.docx'), or(or(equals(toLower(trim(first(split(body('Validate_onedrive_content_metadata')?['MediaType'], ';')))), ''), equals(toLower(trim(first(split(body('Validate_onedrive_content_metadata')?['MediaType'], ';')))), 'application/octet-stream')), equals(toLower(trim(first(split(body('Validate_onedrive_content_metadata')?['MediaType'], ';')))), 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'))), and(endsWith(toLower(body('Validate_onedrive_content_metadata')?['Name']), '.xlsx'), or(or(equals(toLower(trim(first(split(body('Validate_onedrive_content_metadata')?['MediaType'], ';')))), ''), equals(toLower(trim(first(split(body('Validate_onedrive_content_metadata')?['MediaType'], ';')))), 'application/octet-stream')), equals(toLower(trim(first(split(body('Validate_onedrive_content_metadata')?['MediaType'], ';')))), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'))))",
+                          "@or(and(endsWith(toLower(body('Validate_onedrive_content_metadata')?['Name']), '.pdf'), or(or(equals(toLower(trim(first(split(body('Validate_onedrive_content_metadata')?['MediaType'], ';')))), string(null)), equals(toLower(trim(first(split(body('Validate_onedrive_content_metadata')?['MediaType'], ';')))), 'application/octet-stream')), equals(toLower(trim(first(split(body('Validate_onedrive_content_metadata')?['MediaType'], ';')))), 'application/pdf'))), and(endsWith(toLower(body('Validate_onedrive_content_metadata')?['Name']), '.docx'), or(or(equals(toLower(trim(first(split(body('Validate_onedrive_content_metadata')?['MediaType'], ';')))), string(null)), equals(toLower(trim(first(split(body('Validate_onedrive_content_metadata')?['MediaType'], ';')))), 'application/octet-stream')), equals(toLower(trim(first(split(body('Validate_onedrive_content_metadata')?['MediaType'], ';')))), 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'))), and(endsWith(toLower(body('Validate_onedrive_content_metadata')?['Name']), '.xlsx'), or(or(equals(toLower(trim(first(split(body('Validate_onedrive_content_metadata')?['MediaType'], ';')))), string(null)), equals(toLower(trim(first(split(body('Validate_onedrive_content_metadata')?['MediaType'], ';')))), 'application/octet-stream')), equals(toLower(trim(first(split(body('Validate_onedrive_content_metadata')?['MediaType'], ';')))), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'))))",
                           true
                         ]
                       },
@@ -6083,7 +6089,7 @@
                               },
                               {
                                 "equals": [
-                                  "@or(and(endsWith(toLower(body('Validate_onedrive_content_metadata')?['Name']), '.pdf'), or(or(equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['contentType'], ';')))), ''), equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['contentType'], ';')))), 'application/octet-stream')), equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['contentType'], ';')))), 'application/pdf'))), and(endsWith(toLower(body('Validate_onedrive_content_metadata')?['Name']), '.docx'), or(or(equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['contentType'], ';')))), ''), equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['contentType'], ';')))), 'application/octet-stream')), equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['contentType'], ';')))), 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'))), and(endsWith(toLower(body('Validate_onedrive_content_metadata')?['Name']), '.xlsx'), or(or(equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['contentType'], ';')))), ''), equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['contentType'], ';')))), 'application/octet-stream')), equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['contentType'], ';')))), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'))))",
+                                  "@or(and(endsWith(toLower(body('Validate_onedrive_content_metadata')?['Name']), '.pdf'), or(or(equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['contentType'], ';')))), string(null)), equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['contentType'], ';')))), 'application/octet-stream')), equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['contentType'], ';')))), 'application/pdf'))), and(endsWith(toLower(body('Validate_onedrive_content_metadata')?['Name']), '.docx'), or(or(equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['contentType'], ';')))), string(null)), equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['contentType'], ';')))), 'application/octet-stream')), equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['contentType'], ';')))), 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'))), and(endsWith(toLower(body('Validate_onedrive_content_metadata')?['Name']), '.xlsx'), or(or(equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['contentType'], ';')))), string(null)), equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['contentType'], ';')))), 'application/octet-stream')), equals(toLower(trim(first(split(body('Validate_onedrive_binary')?['contentType'], ';')))), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'))))",
                                   true
                                 ]
                               },
@@ -6274,6 +6280,2476 @@
               },
               "runAfter": {
                 "Validate_onedrive_content_metadata": [
+                  "Succeeded"
+                ]
+              }
+            }
+          }
+        },
+        "create_draft": {
+          "case": "create_draft",
+          "actions": {
+            "Validate_create_draft_request": {
+              "type": "ParseJson",
+              "runAfter": {},
+              "inputs": {
+                "content": "@triggerBody()",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "operation": {
+                      "type": "string",
+                      "enum": [
+                        "create_draft"
+                      ]
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 36,
+                      "maxLength": 36
+                    },
+                    "args": {
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "operation",
+                    "requestId",
+                    "args"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_create_draft_request": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_create_draft_request": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "The request envelope is invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_create_draft_request_format": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_create_draft_request": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@and(equals(length(toLower(replace(body('Validate_create_draft_request')?['requestId'], '-', string(null)))), 32), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(replace(body('Validate_create_draft_request')?['requestId'], '-', string(null))), '0', string(null)), '1', string(null)), '2', string(null)), '3', string(null)), '4', string(null)), '5', string(null)), '6', string(null)), '7', string(null)), '8', string(null)), '9', string(null)), 'a', string(null)), 'b', string(null)), 'c', string(null)), 'd', string(null)), 'e', string(null)), 'f', string(null)), string(null)), equals(substring(body('Validate_create_draft_request')?['requestId'], 8, 1), '-'), equals(substring(body('Validate_create_draft_request')?['requestId'], 13, 1), '-'), equals(substring(body('Validate_create_draft_request')?['requestId'], 18, 1), '-'), equals(substring(body('Validate_create_draft_request')?['requestId'], 23, 1), '-'), equals(substring(body('Validate_create_draft_request')?['requestId'], 14, 1), '4'), contains('89ab', toLower(substring(body('Validate_create_draft_request')?['requestId'], 19, 1))))",
+                "schema": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_create_draft_request_format": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_create_draft_request_format": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "The request envelope is invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_create_draft_args": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_create_draft_request_format": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@body('Validate_create_draft_request')?['args']",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "to": {
+                      "type": "array",
+                      "maxItems": 50,
+                      "items": {
+                        "type": "string",
+                        "maxLength": 254
+                      }
+                    },
+                    "cc": {
+                      "type": "array",
+                      "maxItems": 50,
+                      "items": {
+                        "type": "string",
+                        "maxLength": 254
+                      }
+                    },
+                    "bcc": {
+                      "type": "array",
+                      "maxItems": 50,
+                      "items": {
+                        "type": "string",
+                        "maxLength": 254
+                      }
+                    },
+                    "subject": {
+                      "type": "string",
+                      "maxLength": 512
+                    },
+                    "body": {
+                      "type": "string",
+                      "maxLength": 20000
+                    }
+                  },
+                  "required": [
+                    "to",
+                    "subject",
+                    "body"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_create_draft_args": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_create_draft_args": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The draft operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_create_draft_controls": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_create_draft_args": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@and(greater(length(coalesce(body('Validate_create_draft_args')?['to'], json('[]'))), 0), lessOrEquals(add(add(length(coalesce(body('Validate_create_draft_args')?['to'], json('[]'))), length(coalesce(body('Validate_create_draft_args')?['cc'], json('[]')))), length(coalesce(body('Validate_create_draft_args')?['bcc'], json('[]')))), 50))",
+                "schema": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_create_draft_controls": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_create_draft_controls": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The draft operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Select_create_draft_to": {
+              "type": "Select",
+              "runAfter": {
+                "Validate_create_draft_controls": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "from": "@coalesce(body('Validate_create_draft_args')?['to'], json('[]'))",
+                "select": {
+                  "emailAddress": {
+                    "address": "@if(and(not(contains(item(), '\u001c')), not(contains(item(), '\u001d')), not(contains(item(), '\u001e')), not(contains(item(), '\u001f')), not(contains(item(), '')), greater(length(trim(item())), 0), lessOrEquals(length(trim(item())), 254), equals(length(split(trim(item()), '@')), 2), greater(length(first(split(trim(item()), '@'))), 0), and(equals(uriComponent(replace(replace(replace(replace(replace(first(split(trim(item()), '@')), '_', string(null)), '+', string(null)), '-', string(null)), '''', string(null)), '.', string(null))), replace(replace(replace(replace(replace(first(split(trim(item()), '@')), '_', string(null)), '+', string(null)), '-', string(null)), '''', string(null)), '.', string(null))), not(contains(replace(replace(replace(replace(replace(first(split(trim(item()), '@')), '_', string(null)), '+', string(null)), '-', string(null)), '''', string(null)), '.', string(null)), '-')), not(contains(replace(replace(replace(replace(replace(first(split(trim(item()), '@')), '_', string(null)), '+', string(null)), '-', string(null)), '''', string(null)), '.', string(null)), '_')), not(contains(replace(replace(replace(replace(replace(first(split(trim(item()), '@')), '_', string(null)), '+', string(null)), '-', string(null)), '''', string(null)), '.', string(null)), '.')), not(contains(replace(replace(replace(replace(replace(first(split(trim(item()), '@')), '_', string(null)), '+', string(null)), '-', string(null)), '''', string(null)), '.', string(null)), '!')), not(contains(replace(replace(replace(replace(replace(first(split(trim(item()), '@')), '_', string(null)), '+', string(null)), '-', string(null)), '''', string(null)), '.', string(null)), '~')), not(contains(replace(replace(replace(replace(replace(first(split(trim(item()), '@')), '_', string(null)), '+', string(null)), '-', string(null)), '''', string(null)), '.', string(null)), '*')), not(contains(replace(replace(replace(replace(replace(first(split(trim(item()), '@')), '_', string(null)), '+', string(null)), '-', string(null)), '''', string(null)), '.', string(null)), '''')), not(contains(replace(replace(replace(replace(replace(first(split(trim(item()), '@')), '_', string(null)), '+', string(null)), '-', string(null)), '''', string(null)), '.', string(null)), '(')), not(contains(replace(replace(replace(replace(replace(first(split(trim(item()), '@')), '_', string(null)), '+', string(null)), '-', string(null)), '''', string(null)), '.', string(null)), ')'))), not(startsWith(first(split(trim(item()), '@')), '.')), not(endsWith(first(split(trim(item()), '@')), '.')), not(endsWith(first(split(trim(item()), '@')), '''')), not(contains(first(split(trim(item()), '@')), '..')), and(equals(uriComponent(replace(replace(last(split(trim(item()), '@')), '-', string(null)), '.', string(null))), replace(replace(last(split(trim(item()), '@')), '-', string(null)), '.', string(null))), not(contains(replace(replace(last(split(trim(item()), '@')), '-', string(null)), '.', string(null)), '-')), not(contains(replace(replace(last(split(trim(item()), '@')), '-', string(null)), '.', string(null)), '_')), not(contains(replace(replace(last(split(trim(item()), '@')), '-', string(null)), '.', string(null)), '.')), not(contains(replace(replace(last(split(trim(item()), '@')), '-', string(null)), '.', string(null)), '!')), not(contains(replace(replace(last(split(trim(item()), '@')), '-', string(null)), '.', string(null)), '~')), not(contains(replace(replace(last(split(trim(item()), '@')), '-', string(null)), '.', string(null)), '*')), not(contains(replace(replace(last(split(trim(item()), '@')), '-', string(null)), '.', string(null)), '''')), not(contains(replace(replace(last(split(trim(item()), '@')), '-', string(null)), '.', string(null)), '(')), not(contains(replace(replace(last(split(trim(item()), '@')), '-', string(null)), '.', string(null)), ')'))), contains(last(split(trim(item()), '@')), '.'), not(startsWith(last(split(trim(item()), '@')), '.')), not(endsWith(last(split(trim(item()), '@')), '.')), not(startsWith(last(split(trim(item()), '@')), '-')), not(endsWith(last(split(trim(item()), '@')), '-')), not(contains(last(split(trim(item()), '@')), '..')), not(contains(last(split(trim(item()), '@')), '.-')), not(contains(last(split(trim(item()), '@')), '-.')), greaterOrEquals(length(last(split(last(split(trim(item()), '@')), '.'))), 2), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(last(split(last(split(trim(item()), '@')), '.'))), 'a', string(null)), 'b', string(null)), 'c', string(null)), 'd', string(null)), 'e', string(null)), 'f', string(null)), 'g', string(null)), 'h', string(null)), 'i', string(null)), 'j', string(null)), 'k', string(null)), 'l', string(null)), 'm', string(null)), 'n', string(null)), 'o', string(null)), 'p', string(null)), 'q', string(null)), 'r', string(null)), 's', string(null)), 't', string(null)), 'u', string(null)), 'v', string(null)), 'w', string(null)), 'x', string(null)), 'y', string(null)), 'z', string(null)), string(null))), trim(item()), null)"
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs",
+                    "outputs"
+                  ]
+                }
+              }
+            },
+            "Error_Select_create_draft_to": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Select_create_draft_to": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The draft operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_create_draft_to": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Select_create_draft_to": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@body('Select_create_draft_to')",
+                "schema": {
+                  "type": "array",
+                  "maxItems": 50,
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "emailAddress": {
+                        "type": "object",
+                        "properties": {
+                          "address": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 254
+                          }
+                        },
+                        "required": [
+                          "address"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "emailAddress"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_create_draft_to": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_create_draft_to": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The draft operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Select_create_draft_cc": {
+              "type": "Select",
+              "runAfter": {
+                "Validate_create_draft_to": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "from": "@coalesce(body('Validate_create_draft_args')?['cc'], json('[]'))",
+                "select": {
+                  "emailAddress": {
+                    "address": "@if(and(not(contains(item(), '\u001c')), not(contains(item(), '\u001d')), not(contains(item(), '\u001e')), not(contains(item(), '\u001f')), not(contains(item(), '')), greater(length(trim(item())), 0), lessOrEquals(length(trim(item())), 254), equals(length(split(trim(item()), '@')), 2), greater(length(first(split(trim(item()), '@'))), 0), and(equals(uriComponent(replace(replace(replace(replace(replace(first(split(trim(item()), '@')), '_', string(null)), '+', string(null)), '-', string(null)), '''', string(null)), '.', string(null))), replace(replace(replace(replace(replace(first(split(trim(item()), '@')), '_', string(null)), '+', string(null)), '-', string(null)), '''', string(null)), '.', string(null))), not(contains(replace(replace(replace(replace(replace(first(split(trim(item()), '@')), '_', string(null)), '+', string(null)), '-', string(null)), '''', string(null)), '.', string(null)), '-')), not(contains(replace(replace(replace(replace(replace(first(split(trim(item()), '@')), '_', string(null)), '+', string(null)), '-', string(null)), '''', string(null)), '.', string(null)), '_')), not(contains(replace(replace(replace(replace(replace(first(split(trim(item()), '@')), '_', string(null)), '+', string(null)), '-', string(null)), '''', string(null)), '.', string(null)), '.')), not(contains(replace(replace(replace(replace(replace(first(split(trim(item()), '@')), '_', string(null)), '+', string(null)), '-', string(null)), '''', string(null)), '.', string(null)), '!')), not(contains(replace(replace(replace(replace(replace(first(split(trim(item()), '@')), '_', string(null)), '+', string(null)), '-', string(null)), '''', string(null)), '.', string(null)), '~')), not(contains(replace(replace(replace(replace(replace(first(split(trim(item()), '@')), '_', string(null)), '+', string(null)), '-', string(null)), '''', string(null)), '.', string(null)), '*')), not(contains(replace(replace(replace(replace(replace(first(split(trim(item()), '@')), '_', string(null)), '+', string(null)), '-', string(null)), '''', string(null)), '.', string(null)), '''')), not(contains(replace(replace(replace(replace(replace(first(split(trim(item()), '@')), '_', string(null)), '+', string(null)), '-', string(null)), '''', string(null)), '.', string(null)), '(')), not(contains(replace(replace(replace(replace(replace(first(split(trim(item()), '@')), '_', string(null)), '+', string(null)), '-', string(null)), '''', string(null)), '.', string(null)), ')'))), not(startsWith(first(split(trim(item()), '@')), '.')), not(endsWith(first(split(trim(item()), '@')), '.')), not(endsWith(first(split(trim(item()), '@')), '''')), not(contains(first(split(trim(item()), '@')), '..')), and(equals(uriComponent(replace(replace(last(split(trim(item()), '@')), '-', string(null)), '.', string(null))), replace(replace(last(split(trim(item()), '@')), '-', string(null)), '.', string(null))), not(contains(replace(replace(last(split(trim(item()), '@')), '-', string(null)), '.', string(null)), '-')), not(contains(replace(replace(last(split(trim(item()), '@')), '-', string(null)), '.', string(null)), '_')), not(contains(replace(replace(last(split(trim(item()), '@')), '-', string(null)), '.', string(null)), '.')), not(contains(replace(replace(last(split(trim(item()), '@')), '-', string(null)), '.', string(null)), '!')), not(contains(replace(replace(last(split(trim(item()), '@')), '-', string(null)), '.', string(null)), '~')), not(contains(replace(replace(last(split(trim(item()), '@')), '-', string(null)), '.', string(null)), '*')), not(contains(replace(replace(last(split(trim(item()), '@')), '-', string(null)), '.', string(null)), '''')), not(contains(replace(replace(last(split(trim(item()), '@')), '-', string(null)), '.', string(null)), '(')), not(contains(replace(replace(last(split(trim(item()), '@')), '-', string(null)), '.', string(null)), ')'))), contains(last(split(trim(item()), '@')), '.'), not(startsWith(last(split(trim(item()), '@')), '.')), not(endsWith(last(split(trim(item()), '@')), '.')), not(startsWith(last(split(trim(item()), '@')), '-')), not(endsWith(last(split(trim(item()), '@')), '-')), not(contains(last(split(trim(item()), '@')), '..')), not(contains(last(split(trim(item()), '@')), '.-')), not(contains(last(split(trim(item()), '@')), '-.')), greaterOrEquals(length(last(split(last(split(trim(item()), '@')), '.'))), 2), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(last(split(last(split(trim(item()), '@')), '.'))), 'a', string(null)), 'b', string(null)), 'c', string(null)), 'd', string(null)), 'e', string(null)), 'f', string(null)), 'g', string(null)), 'h', string(null)), 'i', string(null)), 'j', string(null)), 'k', string(null)), 'l', string(null)), 'm', string(null)), 'n', string(null)), 'o', string(null)), 'p', string(null)), 'q', string(null)), 'r', string(null)), 's', string(null)), 't', string(null)), 'u', string(null)), 'v', string(null)), 'w', string(null)), 'x', string(null)), 'y', string(null)), 'z', string(null)), string(null))), trim(item()), null)"
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs",
+                    "outputs"
+                  ]
+                }
+              }
+            },
+            "Error_Select_create_draft_cc": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Select_create_draft_cc": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The draft operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_create_draft_cc": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Select_create_draft_cc": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@body('Select_create_draft_cc')",
+                "schema": {
+                  "type": "array",
+                  "maxItems": 50,
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "emailAddress": {
+                        "type": "object",
+                        "properties": {
+                          "address": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 254
+                          }
+                        },
+                        "required": [
+                          "address"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "emailAddress"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_create_draft_cc": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_create_draft_cc": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The draft operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Select_create_draft_bcc": {
+              "type": "Select",
+              "runAfter": {
+                "Validate_create_draft_cc": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "from": "@coalesce(body('Validate_create_draft_args')?['bcc'], json('[]'))",
+                "select": {
+                  "emailAddress": {
+                    "address": "@if(and(not(contains(item(), '\u001c')), not(contains(item(), '\u001d')), not(contains(item(), '\u001e')), not(contains(item(), '\u001f')), not(contains(item(), '')), greater(length(trim(item())), 0), lessOrEquals(length(trim(item())), 254), equals(length(split(trim(item()), '@')), 2), greater(length(first(split(trim(item()), '@'))), 0), and(equals(uriComponent(replace(replace(replace(replace(replace(first(split(trim(item()), '@')), '_', string(null)), '+', string(null)), '-', string(null)), '''', string(null)), '.', string(null))), replace(replace(replace(replace(replace(first(split(trim(item()), '@')), '_', string(null)), '+', string(null)), '-', string(null)), '''', string(null)), '.', string(null))), not(contains(replace(replace(replace(replace(replace(first(split(trim(item()), '@')), '_', string(null)), '+', string(null)), '-', string(null)), '''', string(null)), '.', string(null)), '-')), not(contains(replace(replace(replace(replace(replace(first(split(trim(item()), '@')), '_', string(null)), '+', string(null)), '-', string(null)), '''', string(null)), '.', string(null)), '_')), not(contains(replace(replace(replace(replace(replace(first(split(trim(item()), '@')), '_', string(null)), '+', string(null)), '-', string(null)), '''', string(null)), '.', string(null)), '.')), not(contains(replace(replace(replace(replace(replace(first(split(trim(item()), '@')), '_', string(null)), '+', string(null)), '-', string(null)), '''', string(null)), '.', string(null)), '!')), not(contains(replace(replace(replace(replace(replace(first(split(trim(item()), '@')), '_', string(null)), '+', string(null)), '-', string(null)), '''', string(null)), '.', string(null)), '~')), not(contains(replace(replace(replace(replace(replace(first(split(trim(item()), '@')), '_', string(null)), '+', string(null)), '-', string(null)), '''', string(null)), '.', string(null)), '*')), not(contains(replace(replace(replace(replace(replace(first(split(trim(item()), '@')), '_', string(null)), '+', string(null)), '-', string(null)), '''', string(null)), '.', string(null)), '''')), not(contains(replace(replace(replace(replace(replace(first(split(trim(item()), '@')), '_', string(null)), '+', string(null)), '-', string(null)), '''', string(null)), '.', string(null)), '(')), not(contains(replace(replace(replace(replace(replace(first(split(trim(item()), '@')), '_', string(null)), '+', string(null)), '-', string(null)), '''', string(null)), '.', string(null)), ')'))), not(startsWith(first(split(trim(item()), '@')), '.')), not(endsWith(first(split(trim(item()), '@')), '.')), not(endsWith(first(split(trim(item()), '@')), '''')), not(contains(first(split(trim(item()), '@')), '..')), and(equals(uriComponent(replace(replace(last(split(trim(item()), '@')), '-', string(null)), '.', string(null))), replace(replace(last(split(trim(item()), '@')), '-', string(null)), '.', string(null))), not(contains(replace(replace(last(split(trim(item()), '@')), '-', string(null)), '.', string(null)), '-')), not(contains(replace(replace(last(split(trim(item()), '@')), '-', string(null)), '.', string(null)), '_')), not(contains(replace(replace(last(split(trim(item()), '@')), '-', string(null)), '.', string(null)), '.')), not(contains(replace(replace(last(split(trim(item()), '@')), '-', string(null)), '.', string(null)), '!')), not(contains(replace(replace(last(split(trim(item()), '@')), '-', string(null)), '.', string(null)), '~')), not(contains(replace(replace(last(split(trim(item()), '@')), '-', string(null)), '.', string(null)), '*')), not(contains(replace(replace(last(split(trim(item()), '@')), '-', string(null)), '.', string(null)), '''')), not(contains(replace(replace(last(split(trim(item()), '@')), '-', string(null)), '.', string(null)), '(')), not(contains(replace(replace(last(split(trim(item()), '@')), '-', string(null)), '.', string(null)), ')'))), contains(last(split(trim(item()), '@')), '.'), not(startsWith(last(split(trim(item()), '@')), '.')), not(endsWith(last(split(trim(item()), '@')), '.')), not(startsWith(last(split(trim(item()), '@')), '-')), not(endsWith(last(split(trim(item()), '@')), '-')), not(contains(last(split(trim(item()), '@')), '..')), not(contains(last(split(trim(item()), '@')), '.-')), not(contains(last(split(trim(item()), '@')), '-.')), greaterOrEquals(length(last(split(last(split(trim(item()), '@')), '.'))), 2), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(last(split(last(split(trim(item()), '@')), '.'))), 'a', string(null)), 'b', string(null)), 'c', string(null)), 'd', string(null)), 'e', string(null)), 'f', string(null)), 'g', string(null)), 'h', string(null)), 'i', string(null)), 'j', string(null)), 'k', string(null)), 'l', string(null)), 'm', string(null)), 'n', string(null)), 'o', string(null)), 'p', string(null)), 'q', string(null)), 'r', string(null)), 's', string(null)), 't', string(null)), 'u', string(null)), 'v', string(null)), 'w', string(null)), 'x', string(null)), 'y', string(null)), 'z', string(null)), string(null))), trim(item()), null)"
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs",
+                    "outputs"
+                  ]
+                }
+              }
+            },
+            "Error_Select_create_draft_bcc": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Select_create_draft_bcc": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The draft operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_create_draft_bcc": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Select_create_draft_bcc": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@body('Select_create_draft_bcc')",
+                "schema": {
+                  "type": "array",
+                  "maxItems": 50,
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "emailAddress": {
+                        "type": "object",
+                        "properties": {
+                          "address": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 254
+                          }
+                        },
+                        "required": [
+                          "address"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "emailAddress"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_create_draft_bcc": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_create_draft_bcc": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The draft operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Compose_create_draft_body": {
+              "type": "Compose",
+              "inputs": {
+                "subject": "@body('Validate_create_draft_args')?['subject']",
+                "body": {
+                  "contentType": "Text",
+                  "content": "@body('Validate_create_draft_args')?['body']"
+                },
+                "toRecipients": "@body('Select_create_draft_to')",
+                "ccRecipients": "@body('Select_create_draft_cc')",
+                "bccRecipients": "@body('Select_create_draft_bcc')"
+              },
+              "runAfter": {
+                "Validate_create_draft_bcc": [
+                  "Succeeded"
+                ]
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Compose_create_draft_body": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Compose_create_draft_body": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The draft operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Graph_create_draft": {
+              "type": "OpenApiConnection",
+              "runAfter": {
+                "Compose_create_draft_body": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "parameters": {
+                  "Uri": "https://graph.microsoft.com/v1.0/me/messages",
+                  "Method": "POST",
+                  "CustomHeader1": "Prefer: IdType=\"ImmutableId\"",
+                  "ContentType": "application/json",
+                  "Body": "@string(outputs('Compose_create_draft_body'))"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                  "connectionName": "shared_office365",
+                  "operationId": "HttpRequest"
+                },
+                "authentication": "@parameters('$authentication')",
+                "retryPolicy": {
+                  "type": "none"
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs",
+                    "outputs"
+                  ]
+                }
+              }
+            },
+            "Error_Graph_create_draft": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Graph_create_draft": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 502,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "DRAFT_WRITE_AMBIGUOUS",
+                    "message": "The draft write outcome may be ambiguous; inspect Drafts before retrying."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_create_draft_result": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Graph_create_draft": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@body('Graph_create_draft')",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048
+                    },
+                    "isDraft": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "isDraft"
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_create_draft_result": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_create_draft_result": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 502,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "DRAFT_WRITE_AMBIGUOUS",
+                    "message": "The draft write outcome may be ambiguous; inspect Drafts before retrying."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_create_draft_result_id": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_create_draft_result": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@and(not(equals(body('Validate_create_draft_result')?['id'], '.')), not(equals(body('Validate_create_draft_result')?['id'], '..')), equals(length(uriComponent(body('Validate_create_draft_result')?['id'])), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(body('Validate_create_draft_result')?['id']), '%0', string(null)), '%1', string(null)), '%20', string(null)), '%7F', string(null)), '%C2%85', string(null)), '%C2%A0', string(null)), '%E1%9A%80', string(null)), '%E2%80%80', string(null)), '%E2%80%81', string(null)), '%E2%80%82', string(null)), '%E2%80%83', string(null)), '%E2%80%84', string(null)), '%E2%80%85', string(null)), '%E2%80%86', string(null)), '%E2%80%87', string(null)), '%E2%80%88', string(null)), '%E2%80%89', string(null)), '%E2%80%8A', string(null)), '%E2%80%A8', string(null)), '%E2%80%A9', string(null)), '%E2%80%AF', string(null)), '%E2%81%9F', string(null)), '%E3%80%80', string(null)), '%EF%BB%BF', string(null)))))",
+                "schema": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_create_draft_result_id": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_create_draft_result_id": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 502,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "DRAFT_WRITE_AMBIGUOUS",
+                    "message": "The draft write outcome may be ambiguous; inspect Drafts before retrying."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Respond_create_draft": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_create_draft_result_id": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "statusCode": 200,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": true,
+                  "requestId": "@triggerBody()?['requestId']",
+                  "operation": "@triggerBody()?['operation']",
+                  "data": {
+                    "id": "@body('Validate_create_draft_result')?['id']",
+                    "isDraft": true
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "create_reply_draft": {
+          "case": "create_reply_draft",
+          "actions": {
+            "Validate_create_reply_draft_request": {
+              "type": "ParseJson",
+              "runAfter": {},
+              "inputs": {
+                "content": "@triggerBody()",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "operation": {
+                      "type": "string",
+                      "enum": [
+                        "create_reply_draft"
+                      ]
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 36,
+                      "maxLength": 36
+                    },
+                    "args": {
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "operation",
+                    "requestId",
+                    "args"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_create_reply_draft_request": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_create_reply_draft_request": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "The request envelope is invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_create_reply_draft_request_format": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_create_reply_draft_request": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@and(equals(length(toLower(replace(body('Validate_create_reply_draft_request')?['requestId'], '-', string(null)))), 32), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(replace(body('Validate_create_reply_draft_request')?['requestId'], '-', string(null))), '0', string(null)), '1', string(null)), '2', string(null)), '3', string(null)), '4', string(null)), '5', string(null)), '6', string(null)), '7', string(null)), '8', string(null)), '9', string(null)), 'a', string(null)), 'b', string(null)), 'c', string(null)), 'd', string(null)), 'e', string(null)), 'f', string(null)), string(null)), equals(substring(body('Validate_create_reply_draft_request')?['requestId'], 8, 1), '-'), equals(substring(body('Validate_create_reply_draft_request')?['requestId'], 13, 1), '-'), equals(substring(body('Validate_create_reply_draft_request')?['requestId'], 18, 1), '-'), equals(substring(body('Validate_create_reply_draft_request')?['requestId'], 23, 1), '-'), equals(substring(body('Validate_create_reply_draft_request')?['requestId'], 14, 1), '4'), contains('89ab', toLower(substring(body('Validate_create_reply_draft_request')?['requestId'], 19, 1))))",
+                "schema": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_create_reply_draft_request_format": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_create_reply_draft_request_format": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "The request envelope is invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_create_reply_draft_args": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_create_reply_draft_request_format": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@body('Validate_create_reply_draft_request')?['args']",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "messageId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048
+                    },
+                    "body": {
+                      "type": "string",
+                      "maxLength": 20000
+                    }
+                  },
+                  "required": [
+                    "messageId",
+                    "body"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_create_reply_draft_args": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_create_reply_draft_args": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The draft operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_create_reply_draft_controls": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_create_reply_draft_args": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@and(not(equals(body('Validate_create_reply_draft_args')?['messageId'], '.')), not(equals(body('Validate_create_reply_draft_args')?['messageId'], '..')), equals(length(uriComponent(body('Validate_create_reply_draft_args')?['messageId'])), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(body('Validate_create_reply_draft_args')?['messageId']), '%0', string(null)), '%1', string(null)), '%20', string(null)), '%7F', string(null)), '%C2%85', string(null)), '%C2%A0', string(null)), '%E1%9A%80', string(null)), '%E2%80%80', string(null)), '%E2%80%81', string(null)), '%E2%80%82', string(null)), '%E2%80%83', string(null)), '%E2%80%84', string(null)), '%E2%80%85', string(null)), '%E2%80%86', string(null)), '%E2%80%87', string(null)), '%E2%80%88', string(null)), '%E2%80%89', string(null)), '%E2%80%8A', string(null)), '%E2%80%A8', string(null)), '%E2%80%A9', string(null)), '%E2%80%AF', string(null)), '%E2%81%9F', string(null)), '%E3%80%80', string(null)), '%EF%BB%BF', string(null)))))",
+                "schema": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_create_reply_draft_controls": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_create_reply_draft_controls": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The draft operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Compose_create_reply_draft_body": {
+              "type": "Compose",
+              "inputs": {
+                "message": {
+                  "body": {
+                    "contentType": "Text",
+                    "content": "@body('Validate_create_reply_draft_args')?['body']"
+                  }
+                }
+              },
+              "runAfter": {
+                "Validate_create_reply_draft_controls": [
+                  "Succeeded"
+                ]
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Compose_create_reply_draft_body": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Compose_create_reply_draft_body": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The draft operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Graph_create_reply_draft": {
+              "type": "OpenApiConnection",
+              "runAfter": {
+                "Compose_create_reply_draft_body": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "parameters": {
+                  "Uri": "@concat('https://graph.microsoft.com/v1.0/me/messages/', uriComponent(body('Validate_create_reply_draft_args')?['messageId']), '/createReply')",
+                  "Method": "POST",
+                  "CustomHeader1": "Prefer: IdType=\"ImmutableId\"",
+                  "ContentType": "application/json",
+                  "Body": "@string(outputs('Compose_create_reply_draft_body'))"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                  "connectionName": "shared_office365",
+                  "operationId": "HttpRequest"
+                },
+                "authentication": "@parameters('$authentication')",
+                "retryPolicy": {
+                  "type": "none"
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs",
+                    "outputs"
+                  ]
+                }
+              }
+            },
+            "Error_Graph_create_reply_draft": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Graph_create_reply_draft": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 502,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "DRAFT_WRITE_AMBIGUOUS",
+                    "message": "The draft write outcome may be ambiguous; inspect Drafts before retrying."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_create_reply_draft_result": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Graph_create_reply_draft": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@body('Graph_create_reply_draft')",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048
+                    },
+                    "isDraft": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "isDraft"
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_create_reply_draft_result": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_create_reply_draft_result": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 502,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "DRAFT_WRITE_AMBIGUOUS",
+                    "message": "The draft write outcome may be ambiguous; inspect Drafts before retrying."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_create_reply_draft_result_id": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_create_reply_draft_result": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@and(not(equals(body('Validate_create_reply_draft_result')?['id'], '.')), not(equals(body('Validate_create_reply_draft_result')?['id'], '..')), equals(length(uriComponent(body('Validate_create_reply_draft_result')?['id'])), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(body('Validate_create_reply_draft_result')?['id']), '%0', string(null)), '%1', string(null)), '%20', string(null)), '%7F', string(null)), '%C2%85', string(null)), '%C2%A0', string(null)), '%E1%9A%80', string(null)), '%E2%80%80', string(null)), '%E2%80%81', string(null)), '%E2%80%82', string(null)), '%E2%80%83', string(null)), '%E2%80%84', string(null)), '%E2%80%85', string(null)), '%E2%80%86', string(null)), '%E2%80%87', string(null)), '%E2%80%88', string(null)), '%E2%80%89', string(null)), '%E2%80%8A', string(null)), '%E2%80%A8', string(null)), '%E2%80%A9', string(null)), '%E2%80%AF', string(null)), '%E2%81%9F', string(null)), '%E3%80%80', string(null)), '%EF%BB%BF', string(null)))))",
+                "schema": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_create_reply_draft_result_id": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_create_reply_draft_result_id": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 502,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "DRAFT_WRITE_AMBIGUOUS",
+                    "message": "The draft write outcome may be ambiguous; inspect Drafts before retrying."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Respond_create_reply_draft": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_create_reply_draft_result_id": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "statusCode": 200,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": true,
+                  "requestId": "@triggerBody()?['requestId']",
+                  "operation": "@triggerBody()?['operation']",
+                  "data": {
+                    "id": "@body('Validate_create_reply_draft_result')?['id']",
+                    "isDraft": true
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "add_draft_attachment": {
+          "case": "add_draft_attachment",
+          "actions": {
+            "Validate_add_draft_attachment_request": {
+              "type": "ParseJson",
+              "runAfter": {},
+              "inputs": {
+                "content": "@triggerBody()",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "operation": {
+                      "type": "string",
+                      "enum": [
+                        "add_draft_attachment"
+                      ]
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 36,
+                      "maxLength": 36
+                    },
+                    "args": {
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "operation",
+                    "requestId",
+                    "args"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_add_draft_attachment_request": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_add_draft_attachment_request": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "The request envelope is invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_add_draft_attachment_request_format": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_add_draft_attachment_request": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@and(equals(length(toLower(replace(body('Validate_add_draft_attachment_request')?['requestId'], '-', string(null)))), 32), equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(toLower(replace(body('Validate_add_draft_attachment_request')?['requestId'], '-', string(null))), '0', string(null)), '1', string(null)), '2', string(null)), '3', string(null)), '4', string(null)), '5', string(null)), '6', string(null)), '7', string(null)), '8', string(null)), '9', string(null)), 'a', string(null)), 'b', string(null)), 'c', string(null)), 'd', string(null)), 'e', string(null)), 'f', string(null)), string(null)), equals(substring(body('Validate_add_draft_attachment_request')?['requestId'], 8, 1), '-'), equals(substring(body('Validate_add_draft_attachment_request')?['requestId'], 13, 1), '-'), equals(substring(body('Validate_add_draft_attachment_request')?['requestId'], 18, 1), '-'), equals(substring(body('Validate_add_draft_attachment_request')?['requestId'], 23, 1), '-'), equals(substring(body('Validate_add_draft_attachment_request')?['requestId'], 14, 1), '4'), contains('89ab', toLower(substring(body('Validate_add_draft_attachment_request')?['requestId'], 19, 1))))",
+                "schema": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_add_draft_attachment_request_format": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_add_draft_attachment_request_format": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "The request envelope is invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_add_draft_attachment_args": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_add_draft_attachment_request_format": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@body('Validate_add_draft_attachment_request')?['args']",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "draftId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048
+                    },
+                    "name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 255
+                    },
+                    "contentType": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 127
+                    },
+                    "contentBytes": {
+                      "type": "string",
+                      "minLength": 4,
+                      "maxLength": 2796204
+                    }
+                  },
+                  "required": [
+                    "draftId",
+                    "name",
+                    "contentType",
+                    "contentBytes"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_add_draft_attachment_args": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_add_draft_attachment_args": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The draft operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_add_draft_attachment_controls": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_add_draft_attachment_args": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@and(and(not(equals(body('Validate_add_draft_attachment_args')?['draftId'], '.')), not(equals(body('Validate_add_draft_attachment_args')?['draftId'], '..')), equals(length(uriComponent(body('Validate_add_draft_attachment_args')?['draftId'])), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(body('Validate_add_draft_attachment_args')?['draftId']), '%0', string(null)), '%1', string(null)), '%20', string(null)), '%7F', string(null)), '%C2%85', string(null)), '%C2%A0', string(null)), '%E1%9A%80', string(null)), '%E2%80%80', string(null)), '%E2%80%81', string(null)), '%E2%80%82', string(null)), '%E2%80%83', string(null)), '%E2%80%84', string(null)), '%E2%80%85', string(null)), '%E2%80%86', string(null)), '%E2%80%87', string(null)), '%E2%80%88', string(null)), '%E2%80%89', string(null)), '%E2%80%8A', string(null)), '%E2%80%A8', string(null)), '%E2%80%A9', string(null)), '%E2%80%AF', string(null)), '%E2%81%9F', string(null)), '%E3%80%80', string(null)), '%EF%BB%BF', string(null))))), equals(length(uriComponent(body('Validate_add_draft_attachment_args')?['name'])), length(replace(replace(replace(replace(replace(replace(replace(uriComponent(body('Validate_add_draft_attachment_args')?['name']), '%0', string(null)), '%1', string(null)), '%7F', string(null)), '%C2%8', string(null)), '%C2%9', string(null)), '%2F', string(null)), '%5C', string(null)))), and(and(equals(uriComponent(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(body('Validate_add_draft_attachment_args')?['contentType'], '!', string(null)), '#', string(null)), '$', string(null)), '&', string(null)), '^', string(null)), '_', string(null)), '.', string(null)), '+', string(null)), '-', string(null)), '/', string(null))), replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(body('Validate_add_draft_attachment_args')?['contentType'], '!', string(null)), '#', string(null)), '$', string(null)), '&', string(null)), '^', string(null)), '_', string(null)), '.', string(null)), '+', string(null)), '-', string(null)), '/', string(null))), not(contains(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(body('Validate_add_draft_attachment_args')?['contentType'], '!', string(null)), '#', string(null)), '$', string(null)), '&', string(null)), '^', string(null)), '_', string(null)), '.', string(null)), '+', string(null)), '-', string(null)), '/', string(null)), '-')), not(contains(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(body('Validate_add_draft_attachment_args')?['contentType'], '!', string(null)), '#', string(null)), '$', string(null)), '&', string(null)), '^', string(null)), '_', string(null)), '.', string(null)), '+', string(null)), '-', string(null)), '/', string(null)), '_')), not(contains(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(body('Validate_add_draft_attachment_args')?['contentType'], '!', string(null)), '#', string(null)), '$', string(null)), '&', string(null)), '^', string(null)), '_', string(null)), '.', string(null)), '+', string(null)), '-', string(null)), '/', string(null)), '.')), not(contains(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(body('Validate_add_draft_attachment_args')?['contentType'], '!', string(null)), '#', string(null)), '$', string(null)), '&', string(null)), '^', string(null)), '_', string(null)), '.', string(null)), '+', string(null)), '-', string(null)), '/', string(null)), '!')), not(contains(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(body('Validate_add_draft_attachment_args')?['contentType'], '!', string(null)), '#', string(null)), '$', string(null)), '&', string(null)), '^', string(null)), '_', string(null)), '.', string(null)), '+', string(null)), '-', string(null)), '/', string(null)), '~')), not(contains(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(body('Validate_add_draft_attachment_args')?['contentType'], '!', string(null)), '#', string(null)), '$', string(null)), '&', string(null)), '^', string(null)), '_', string(null)), '.', string(null)), '+', string(null)), '-', string(null)), '/', string(null)), '*')), not(contains(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(body('Validate_add_draft_attachment_args')?['contentType'], '!', string(null)), '#', string(null)), '$', string(null)), '&', string(null)), '^', string(null)), '_', string(null)), '.', string(null)), '+', string(null)), '-', string(null)), '/', string(null)), '''')), not(contains(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(body('Validate_add_draft_attachment_args')?['contentType'], '!', string(null)), '#', string(null)), '$', string(null)), '&', string(null)), '^', string(null)), '_', string(null)), '.', string(null)), '+', string(null)), '-', string(null)), '/', string(null)), '(')), not(contains(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(body('Validate_add_draft_attachment_args')?['contentType'], '!', string(null)), '#', string(null)), '$', string(null)), '&', string(null)), '^', string(null)), '_', string(null)), '.', string(null)), '+', string(null)), '-', string(null)), '/', string(null)), ')'))), equals(length(split(body('Validate_add_draft_attachment_args')?['contentType'], '/')), 2), not(empty(first(split(body('Validate_add_draft_attachment_args')?['contentType'], '/')))), not(empty(last(split(body('Validate_add_draft_attachment_args')?['contentType'], '/'))))))",
+                "schema": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_add_draft_attachment_controls": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_add_draft_attachment_controls": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The draft operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Select_add_draft_attachment_alphabet": {
+              "type": "Select",
+              "runAfter": {
+                "Validate_add_draft_attachment_controls": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "from": "@chunk(body('Validate_add_draft_attachment_args')?['contentBytes'], 8192)",
+                "select": "@and(equals(uriComponent(item()), replace(replace(replace(item(), '+', '%2B'), '/', '%2F'), '=', '%3D')), not(contains(item(), '-')), not(contains(item(), '_')), not(contains(item(), '.')), not(contains(item(), '!')), not(contains(item(), '~')), not(contains(item(), '*')), not(contains(item(), '''')), not(contains(item(), '(')), not(contains(item(), ')')))"
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs",
+                    "outputs"
+                  ]
+                }
+              }
+            },
+            "Error_Select_add_draft_attachment_alphabet": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Select_add_draft_attachment_alphabet": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The draft operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_add_draft_attachment_alphabet": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Select_add_draft_attachment_alphabet": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@body('Select_add_draft_attachment_alphabet')",
+                "schema": {
+                  "type": "array",
+                  "maxItems": 342,
+                  "items": {
+                    "type": "boolean",
+                    "enum": [
+                      true
+                    ]
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_add_draft_attachment_alphabet": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_add_draft_attachment_alphabet": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The draft operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_add_draft_attachment_padding": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_add_draft_attachment_alphabet": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@and(equals(mod(length(body('Validate_add_draft_attachment_args')?['contentBytes']), 4), 0), or(equals(indexOf(body('Validate_add_draft_attachment_args')?['contentBytes'], '='), -1), equals(indexOf(body('Validate_add_draft_attachment_args')?['contentBytes'], '='), sub(length(body('Validate_add_draft_attachment_args')?['contentBytes']), if(endsWith(body('Validate_add_draft_attachment_args')?['contentBytes'], '=='), 2, 1)))), or(not(endsWith(body('Validate_add_draft_attachment_args')?['contentBytes'], '==')), contains('AQgw', substring(body('Validate_add_draft_attachment_args')?['contentBytes'], sub(length(body('Validate_add_draft_attachment_args')?['contentBytes']), 3), 1))), or(not(endsWith(body('Validate_add_draft_attachment_args')?['contentBytes'], '=')), endsWith(body('Validate_add_draft_attachment_args')?['contentBytes'], '=='), contains('AEIMQUYcgkosw048', substring(body('Validate_add_draft_attachment_args')?['contentBytes'], sub(length(body('Validate_add_draft_attachment_args')?['contentBytes']), 2), 1))), greater(sub(mul(div(length(body('Validate_add_draft_attachment_args')?['contentBytes']), 4), 3), if(endsWith(body('Validate_add_draft_attachment_args')?['contentBytes'], '=='), 2, if(endsWith(body('Validate_add_draft_attachment_args')?['contentBytes'], '='), 1, 0))), 0), lessOrEquals(sub(mul(div(length(body('Validate_add_draft_attachment_args')?['contentBytes']), 4), 3), if(endsWith(body('Validate_add_draft_attachment_args')?['contentBytes'], '=='), 2, if(endsWith(body('Validate_add_draft_attachment_args')?['contentBytes'], '='), 1, 0))), 2097152))",
+                "schema": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_add_draft_attachment_padding": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_add_draft_attachment_padding": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The draft operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Compose_add_draft_attachment_size": {
+              "type": "Compose",
+              "inputs": "@sub(mul(div(length(body('Validate_add_draft_attachment_args')?['contentBytes']), 4), 3), if(endsWith(body('Validate_add_draft_attachment_args')?['contentBytes'], '=='), 2, if(endsWith(body('Validate_add_draft_attachment_args')?['contentBytes'], '='), 1, 0)))",
+              "runAfter": {
+                "Validate_add_draft_attachment_padding": [
+                  "Succeeded"
+                ]
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Compose_add_draft_attachment_size": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Compose_add_draft_attachment_size": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_ARGUMENTS",
+                    "message": "The draft operation arguments are invalid."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Graph_draft_preflight": {
+              "type": "OpenApiConnection",
+              "runAfter": {
+                "Compose_add_draft_attachment_size": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "parameters": {
+                  "Uri": "@concat('https://graph.microsoft.com/v1.0/me/messages/', uriComponent(body('Validate_add_draft_attachment_args')?['draftId']), '?$select=id,isDraft')",
+                  "Method": "GET",
+                  "CustomHeader1": "Prefer: IdType=\"ImmutableId\"",
+                  "ContentType": "application/json"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                  "connectionName": "shared_office365",
+                  "operationId": "HttpRequest"
+                },
+                "authentication": "@parameters('$authentication')",
+                "retryPolicy": {
+                  "type": "none"
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs",
+                    "outputs"
+                  ]
+                }
+              }
+            },
+            "Error_Graph_draft_preflight": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Graph_draft_preflight": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 502,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "DRAFT_PREFLIGHT_FAILED",
+                    "message": "The draft could not be verified; no attachment upload was attempted."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_draft_preflight": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Graph_draft_preflight": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@body('Graph_draft_preflight')",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048
+                    },
+                    "isDraft": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "isDraft"
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_draft_preflight": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_draft_preflight": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 502,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_DRAFT_PREFLIGHT",
+                    "message": "The draft could not be verified; no attachment upload was attempted."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Validate_draft_preflight_id": {
+              "type": "ParseJson",
+              "runAfter": {
+                "Validate_draft_preflight": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "content": "@and(not(equals(body('Validate_draft_preflight')?['id'], '.')), not(equals(body('Validate_draft_preflight')?['id'], '..')), equals(length(uriComponent(body('Validate_draft_preflight')?['id'])), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(body('Validate_draft_preflight')?['id']), '%0', string(null)), '%1', string(null)), '%20', string(null)), '%7F', string(null)), '%C2%85', string(null)), '%C2%A0', string(null)), '%E1%9A%80', string(null)), '%E2%80%80', string(null)), '%E2%80%81', string(null)), '%E2%80%82', string(null)), '%E2%80%83', string(null)), '%E2%80%84', string(null)), '%E2%80%85', string(null)), '%E2%80%86', string(null)), '%E2%80%87', string(null)), '%E2%80%88', string(null)), '%E2%80%89', string(null)), '%E2%80%8A', string(null)), '%E2%80%A8', string(null)), '%E2%80%A9', string(null)), '%E2%80%AF', string(null)), '%E2%81%9F', string(null)), '%E3%80%80', string(null)), '%EF%BB%BF', string(null)))))",
+                "schema": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Error_Validate_draft_preflight_id": {
+              "type": "Response",
+              "kind": "Http",
+              "runAfter": {
+                "Validate_draft_preflight_id": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 502,
+                "headers": {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-store"
+                },
+                "body": {
+                  "ok": false,
+                  "error": {
+                    "code": "INVALID_DRAFT_PREFLIGHT",
+                    "message": "The draft could not be verified; no attachment upload was attempted."
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              }
+            },
+            "Check_draft_preflight": {
+              "type": "If",
+              "expression": {
+                "and": [
+                  {
+                    "equals": [
+                      "@body('Validate_draft_preflight')?['id']",
+                      "@body('Validate_add_draft_attachment_args')?['draftId']"
+                    ]
+                  },
+                  {
+                    "equals": [
+                      "@body('Validate_draft_preflight')?['isDraft']",
+                      true
+                    ]
+                  }
+                ]
+              },
+              "actions": {
+                "Compose_add_draft_attachment_body": {
+                  "type": "Compose",
+                  "inputs": {
+                    "@@odata.type": "#microsoft.graph.fileAttachment",
+                    "name": "@body('Validate_add_draft_attachment_args')?['name']",
+                    "contentType": "@body('Validate_add_draft_attachment_args')?['contentType']",
+                    "contentBytes": "@body('Validate_add_draft_attachment_args')?['contentBytes']"
+                  },
+                  "runAfter": {},
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs"
+                      ]
+                    }
+                  }
+                },
+                "Error_Compose_add_draft_attachment_body": {
+                  "type": "Response",
+                  "kind": "Http",
+                  "runAfter": {
+                    "Compose_add_draft_attachment_body": [
+                      "Failed",
+                      "TimedOut"
+                    ]
+                  },
+                  "inputs": {
+                    "statusCode": 400,
+                    "headers": {
+                      "Content-Type": "application/json",
+                      "Cache-Control": "no-store"
+                    },
+                    "body": {
+                      "ok": false,
+                      "error": {
+                        "code": "INVALID_ARGUMENTS",
+                        "message": "The draft operation arguments are invalid."
+                      }
+                    }
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs"
+                      ]
+                    }
+                  }
+                },
+                "Graph_add_draft_attachment": {
+                  "type": "OpenApiConnection",
+                  "runAfter": {
+                    "Compose_add_draft_attachment_body": [
+                      "Succeeded"
+                    ]
+                  },
+                  "inputs": {
+                    "parameters": {
+                      "Uri": "@concat('https://graph.microsoft.com/v1.0/me/messages/', uriComponent(body('Validate_add_draft_attachment_args')?['draftId']), '/attachments')",
+                      "Method": "POST",
+                      "CustomHeader1": "Prefer: IdType=\"ImmutableId\"",
+                      "ContentType": "application/json",
+                      "Body": "@string(outputs('Compose_add_draft_attachment_body'))"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                      "connectionName": "shared_office365",
+                      "operationId": "HttpRequest"
+                    },
+                    "authentication": "@parameters('$authentication')",
+                    "retryPolicy": {
+                      "type": "none"
+                    }
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs",
+                        "outputs"
+                      ]
+                    }
+                  }
+                },
+                "Error_Graph_add_draft_attachment": {
+                  "type": "Response",
+                  "kind": "Http",
+                  "runAfter": {
+                    "Graph_add_draft_attachment": [
+                      "Failed",
+                      "TimedOut"
+                    ]
+                  },
+                  "inputs": {
+                    "statusCode": 502,
+                    "headers": {
+                      "Content-Type": "application/json",
+                      "Cache-Control": "no-store"
+                    },
+                    "body": {
+                      "ok": false,
+                      "error": {
+                        "code": "DRAFT_WRITE_AMBIGUOUS",
+                        "message": "The draft write outcome may be ambiguous; inspect Drafts before retrying."
+                      }
+                    }
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs"
+                      ]
+                    }
+                  }
+                },
+                "Validate_add_draft_attachment_result": {
+                  "type": "ParseJson",
+                  "runAfter": {
+                    "Graph_add_draft_attachment": [
+                      "Succeeded"
+                    ]
+                  },
+                  "inputs": {
+                    "content": "@body('Graph_add_draft_attachment')",
+                    "schema": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2048
+                        },
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 255
+                        },
+                        "size": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 2097152
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "size"
+                      ]
+                    }
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs"
+                      ]
+                    }
+                  }
+                },
+                "Error_Validate_add_draft_attachment_result": {
+                  "type": "Response",
+                  "kind": "Http",
+                  "runAfter": {
+                    "Validate_add_draft_attachment_result": [
+                      "Failed",
+                      "TimedOut"
+                    ]
+                  },
+                  "inputs": {
+                    "statusCode": 502,
+                    "headers": {
+                      "Content-Type": "application/json",
+                      "Cache-Control": "no-store"
+                    },
+                    "body": {
+                      "ok": false,
+                      "error": {
+                        "code": "DRAFT_WRITE_AMBIGUOUS",
+                        "message": "The draft write outcome may be ambiguous; inspect Drafts before retrying."
+                      }
+                    }
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs"
+                      ]
+                    }
+                  }
+                },
+                "Validate_add_draft_attachment_result_identity": {
+                  "type": "ParseJson",
+                  "runAfter": {
+                    "Validate_add_draft_attachment_result": [
+                      "Succeeded"
+                    ]
+                  },
+                  "inputs": {
+                    "content": "@and(and(not(equals(body('Validate_add_draft_attachment_result')?['id'], '.')), not(equals(body('Validate_add_draft_attachment_result')?['id'], '..')), equals(length(uriComponent(body('Validate_add_draft_attachment_result')?['id'])), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(body('Validate_add_draft_attachment_result')?['id']), '%0', string(null)), '%1', string(null)), '%20', string(null)), '%7F', string(null)), '%C2%85', string(null)), '%C2%A0', string(null)), '%E1%9A%80', string(null)), '%E2%80%80', string(null)), '%E2%80%81', string(null)), '%E2%80%82', string(null)), '%E2%80%83', string(null)), '%E2%80%84', string(null)), '%E2%80%85', string(null)), '%E2%80%86', string(null)), '%E2%80%87', string(null)), '%E2%80%88', string(null)), '%E2%80%89', string(null)), '%E2%80%8A', string(null)), '%E2%80%A8', string(null)), '%E2%80%A9', string(null)), '%E2%80%AF', string(null)), '%E2%81%9F', string(null)), '%E3%80%80', string(null)), '%EF%BB%BF', string(null))))), equals(body('Validate_add_draft_attachment_result')?['name'], body('Validate_add_draft_attachment_args')?['name']), equals(body('Validate_add_draft_attachment_result')?['size'], outputs('Compose_add_draft_attachment_size')))",
+                    "schema": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs"
+                      ]
+                    }
+                  }
+                },
+                "Error_Validate_add_draft_attachment_result_identity": {
+                  "type": "Response",
+                  "kind": "Http",
+                  "runAfter": {
+                    "Validate_add_draft_attachment_result_identity": [
+                      "Failed",
+                      "TimedOut"
+                    ]
+                  },
+                  "inputs": {
+                    "statusCode": 502,
+                    "headers": {
+                      "Content-Type": "application/json",
+                      "Cache-Control": "no-store"
+                    },
+                    "body": {
+                      "ok": false,
+                      "error": {
+                        "code": "DRAFT_WRITE_AMBIGUOUS",
+                        "message": "The draft write outcome may be ambiguous; inspect Drafts before retrying."
+                      }
+                    }
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs"
+                      ]
+                    }
+                  }
+                },
+                "Respond_add_draft_attachment": {
+                  "type": "Response",
+                  "kind": "Http",
+                  "runAfter": {
+                    "Validate_add_draft_attachment_result_identity": [
+                      "Succeeded"
+                    ]
+                  },
+                  "inputs": {
+                    "statusCode": 200,
+                    "headers": {
+                      "Content-Type": "application/json",
+                      "Cache-Control": "no-store"
+                    },
+                    "body": {
+                      "ok": true,
+                      "requestId": "@triggerBody()?['requestId']",
+                      "operation": "@triggerBody()?['operation']",
+                      "data": {
+                        "draftId": "@body('Validate_add_draft_attachment_args')?['draftId']",
+                        "attachmentId": "@body('Validate_add_draft_attachment_result')?['id']",
+                        "name": "@body('Validate_add_draft_attachment_result')?['name']",
+                        "size": "@body('Validate_add_draft_attachment_result')?['size']"
+                      }
+                    }
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs"
+                      ]
+                    }
+                  }
+                }
+              },
+              "else": {
+                "actions": {
+                  "Reject_draft_preflight": {
+                    "type": "Response",
+                    "kind": "Http",
+                    "runAfter": {},
+                    "inputs": {
+                      "statusCode": 409,
+                      "headers": {
+                        "Content-Type": "application/json",
+                        "Cache-Control": "no-store"
+                      },
+                      "body": {
+                        "ok": false,
+                        "error": {
+                          "code": "DRAFT_NOT_VERIFIED",
+                          "message": "The target is not the requested draft; no attachment upload was attempted."
+                        }
+                      }
+                    },
+                    "runtimeConfiguration": {
+                      "secureData": {
+                        "properties": [
+                          "inputs"
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              "runAfter": {
+                "Validate_draft_preflight_id": [
                   "Succeeded"
                 ]
               }

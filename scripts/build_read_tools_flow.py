@@ -40,6 +40,8 @@ BASE64_CHUNK = 8192
 
 OUTLOOK_TOP_SCHEMA = {"type": "integer", "minimum": 1, "maximum": 50}
 ONEDRIVE_TOP_SCHEMA = {"type": "integer", "minimum": 1, "maximum": 100}
+ONEDRIVE_FOLDER_WINDOW_SIZE = 1000
+ONEDRIVE_FOLDER_TOP_SCHEMA = {"type": "integer", "minimum": 1, "maximum": ONEDRIVE_FOLDER_WINDOW_SIZE}
 SKIP_SCHEMA = {"type": "integer", "minimum": 0, "maximum": 10000}
 ID_SCHEMA = {"type": "string", "minLength": 1, "maxLength": 2048}
 QUERY_SCHEMA = {"type": "string", "minLength": 1, "maxLength": 512}
@@ -101,7 +103,7 @@ ARGUMENTS = {
     "list_attachments": {"messageId": ID_SCHEMA, "top": OUTLOOK_TOP_SCHEMA, "skip": SKIP_SCHEMA},
     "get_attachment": {"messageId": ID_SCHEMA, "attachmentId": ID_SCHEMA},
     "onedrive_search_files": {"query": QUERY_SCHEMA, "top": ONEDRIVE_TOP_SCHEMA},
-    "onedrive_list_folder": {"folderId": ID_SCHEMA, "top": ONEDRIVE_TOP_SCHEMA},
+    "onedrive_list_folder": {"folderId": ID_SCHEMA, "top": ONEDRIVE_FOLDER_TOP_SCHEMA},
     "onedrive_get_metadata": {"fileId": ID_SCHEMA},
     "onedrive_get_content": {"fileId": ID_SCHEMA},
 }
@@ -389,12 +391,12 @@ def conversation_case() -> dict:
     return {"case": "get_conversation", "actions": actions}
 
 
-def onedrive_project_list(actions: dict, source: str, top: str, name: str, run_after: str) -> None:
+def onedrive_project_list(actions: dict, source: str, top: str, name: str, run_after: str, *, max_items: int = 100) -> None:
     # Each native action has a documented shape; do not guess array vs page
     # using empty(value), which misclassifies an empty folder page.
     actions[f"Select_{name}"] = secure({"type": "Select", "runAfter": after(run_after), "inputs": {"from": f"@take({source}, {top})", "select": select_projection(source, ONEDRIVE_RETURN_FIELDS)}})
     failure(actions, f"Select_{name}", code="INVALID_ONEDRIVE_METADATA", message="The upstream OneDrive metadata is invalid.")
-    actions[f"Validate_{name}"] = parse(f"Validate_{name}", f"@body('Select_{name}')", {"type": "array", "maxItems": 100, "items": onedrive_metadata_schema()}, after(f"Select_{name}"))[1]
+    actions[f"Validate_{name}"] = parse(f"Validate_{name}", f"@body('Select_{name}')", {"type": "array", "maxItems": max_items, "items": onedrive_metadata_schema()}, after(f"Select_{name}"))[1]
     failure(actions, f"Validate_{name}", code="INVALID_ONEDRIVE_METADATA", message="The upstream OneDrive metadata is invalid.")
 
 
@@ -421,13 +423,22 @@ def onedrive_list_folder_case() -> dict:
     list_root = {"OneDrive_list_root": onedrive("OneDrive_list_root", "ListRootFolder", {})[1]}
     failure(list_root, "OneDrive_list_root")
     source_root = "body('OneDrive_list_root')"
-    onedrive_project_list(list_root, source_root, top, "onedrive_root_folder", "OneDrive_list_root")
-    list_root["Respond_onedrive_list_root"] = success({"value": "@body('Validate_onedrive_root_folder')", "truncated": f"@greater(length({source_root}), {top})"}, after("Validate_onedrive_root_folder"))
+    cap = ONEDRIVE_FOLDER_WINDOW_SIZE
+    # ListRootFolder is an array operation, with no supported paginationPolicy.
+    onedrive_project_list(list_root, f"take({source_root}, {cap})", top, "onedrive_root_folder", "OneDrive_list_root", max_items=cap)
+    list_root["Respond_onedrive_list_root"] = success({"value": "@body('Validate_onedrive_root_folder')", "truncated": f"@or(greaterOrEquals(length({source_root}), {cap}), greater(length({source_root}), {top}))"}, after("Validate_onedrive_root_folder"))
     list_child = {"OneDrive_list_folder_v2": onedrive("OneDrive_list_folder_v2", "ListFolderV2", {"id": f"@body('{validate}')?['folderId']"})[1]}
+    # Native ListFolderV2 auto-aggregates its actual continuation pages. This
+    # threshold is a minimum, not a maximum: its final page may overshoot. Bound
+    # the aggregated raw array before projection/transport and conservatively
+    # report incompleteness at the boundary even if nextLink is absent. Never
+    # synthesize skip tokens or follow native URLs with a different connector.
+    # Merge rather than replace the secure input/output history configuration.
+    list_child["OneDrive_list_folder_v2"]["runtimeConfiguration"]["paginationPolicy"] = {"minimumItemCount": cap}
     failure(list_child, "OneDrive_list_folder_v2")
     source_child = "body('OneDrive_list_folder_v2')?['value']"
-    onedrive_project_list(list_child, source_child, top, "onedrive_list_folder", "OneDrive_list_folder_v2")
-    list_child["Respond_onedrive_list_folder"] = success({"value": "@body('Validate_onedrive_list_folder')", "truncated": f"@or(greater(length({source_child}), {top}), not(empty(body('OneDrive_list_folder_v2')?['nextLink'])))"}, after("Validate_onedrive_list_folder"))
+    onedrive_project_list(list_child, f"take({source_child}, {cap})", top, "onedrive_list_folder", "OneDrive_list_folder_v2", max_items=cap)
+    list_child["Respond_onedrive_list_folder"] = success({"value": "@body('Validate_onedrive_list_folder')", "truncated": f"@or(greaterOrEquals(length({source_child}), {cap}), greater(length({source_child}), {top}), not(empty(body('OneDrive_list_folder_v2')?['nextLink'])))"}, after("Validate_onedrive_list_folder"))
     actions["Route_onedrive_list_folder"] = condition({"equals": [f"@empty(body('{validate}')?['folderId'])", True]}, list_root, list_child, after(controls))
     return {"case": "onedrive_list_folder", "actions": actions}
 

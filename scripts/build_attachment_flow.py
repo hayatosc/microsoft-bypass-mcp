@@ -10,6 +10,8 @@ from pathlib import Path
 import sys
 from urllib.parse import quote
 
+from clipboard_compat import transform_json
+
 ROOT = Path(__file__).resolve().parents[1]
 BASELINE = ROOT / "scripts/fixtures/microsoft-bypass-flow.pre-attachments.json"
 DESTINATION = ROOT / "power-automate/microsoft-bypass-flow/definition.json"
@@ -308,7 +310,13 @@ def build_definition():
     cases["list_attachments"] = list_case()
     cases["get_attachment"] = get_case()
     from build_read_tools_flow import augment_read_tools
-    return augment_read_tools(definition)
+    from build_draft_tools_flow import augment_draft_tools
+    definition = augment_draft_tools(augment_read_tools(definition))
+    # Classic-designer clipboard paste corrupts empty WDL literal tokens. Apply
+    # the lexical compatibility pass last, only to actions; never to provenance
+    # fixtures, trigger/auth guards, parameters or other top-level values.
+    definition["actions"] = transform_json(definition["actions"])
+    return definition
 
 
 def main():

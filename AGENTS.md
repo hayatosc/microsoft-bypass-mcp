@@ -2,11 +2,11 @@
 
 ## Project
 
-University Microsoft 365 Read-only MCP — a read-only [Model Context Protocol](https://modelcontextprotocol.io)
-server (Cloudflare Workers + Hono) exposing fixed read tools for university
+University Microsoft 365 MCP — a fixed read and draft [Model Context Protocol](https://modelcontextprotocol.io)
+server (Cloudflare Workers + Hono) exposing fixed read and draft-only tools for university
 Microsoft 365 resources through a Power Automate HTTP-trigger intermediary. The
-current implementation covers Outlook mailbox reads, Outlook attachment reads,
-and authored OneDrive for Business owned-file reads. See [`SPEC.md`](./SPEC.md)
+current implementation covers Outlook mailbox and attachment reads, controlled
+draft creation/attachments, and native OneDrive for Business owned-file reads. See [`SPEC.md`](./SPEC.md)
 for the authoritative specification and [`README.md`](./README.md) for a summary.
 
 ## Commands
@@ -41,7 +41,8 @@ src/
   features/documents/      # shared bounded parser dispatch/source adapter
 scripts/
   build_attachment_flow.py # canonical flow generator for Outlook + OneDrive ops
-  build_read_tools_flow.py # augments that definition; no second flow output
+  build_read_tools_flow.py # read/paging augmentation; no second flow output
+  build_draft_tools_flow.py # draft-only augmentation of the same canonical flow
   test_attachment_flow.py  # offline flow contract/redaction tests
   test_read_tools_flow.py  # extension routing, native gates and contract tests
 power-automate/
@@ -50,13 +51,16 @@ power-automate/
 
 ## Hard constraints
 
-- **Read-only fixed surface.** The surface has 13 read tools backed by 11 fixed operations,
+- **Fixed surface.** The surface has 13 read tools and 3 draft-only write tools backed by 14 fixed operations,
   documented in `SPEC.md`: Outlook message/folder/conversation/attachment reads
-  and OneDrive owned-file search/list/metadata/inspect/read backing operations.
+  and OneDrive owned-file search/list/metadata/inspect/read backing operations, plus
+  explicit Outlook draft creation, sender-reply draft creation, and attachment
+  addition to verified drafts. Never add sending or unrelated mutation tools.
   Never add a generic Graph, Outlook, OneDrive, URL, method, body, query, or
   nextLink passthrough tool.
-- **No persistence.** Never store mail or file data in DB/KV/R2/cache. Mail/file
-  data must not outlive a request.
+- **No server persistence.** Never store mail or file data in DB/KV/R2/cache.
+  Transport data must not outlive a request; explicitly requested drafts and
+  attachments persist in Outlook. Draft tools are non-idempotent: no blind retry.
 - **Logging hygiene.** Never log the Power Automate URL, queries, subjects,
   message IDs, file IDs, body text, bytes, base64, or nextLink URLs. The Worker
   logs only `type`, `requestId`, `operation`, `durationMs`, `status`, and `success`.

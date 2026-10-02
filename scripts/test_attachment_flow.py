@@ -16,9 +16,12 @@ import re
 import unittest
 from urllib.parse import quote
 
-from build_attachment_flow import ATTACHMENT_OPERATIONS, BASELINE, BASE64_CHUNK, DESTINATION, FORBIDDEN_ID_CODEPOINTS, GRAPH_ROOT, ID_SCHEMA, MAIL_OPERATIONS, MAX_BASE64, MAX_BYTES, build_definition
+from build_attachment_flow import ATTACHMENT_OPERATIONS, BASELINE, BASE64_CHUNK, DESTINATION, FORBIDDEN_ID_CODEPOINTS, GRAPH_ROOT, ID_SCHEMA, MAIL_OPERATIONS, MAX_BASE64, MAX_BYTES, build_definition, get_case, list_case
+
+from clipboard_compat import transform_json
 
 from build_read_tools_flow import ARGUMENTS, REQUIRED_ARGS
+from build_draft_tools_flow import DRAFT_ARGUMENTS, DRAFT_OPERATIONS, DRAFT_REQUIRED_ARGS
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = json.loads(DESTINATION.read_text(encoding="utf-8"))
@@ -168,6 +171,33 @@ class Expressions:
                 raise ValueError("invalid take operands")
             return value[:max(count, 0)]
 
+        def add(a, b):
+            if type(a) not in (int, float) or type(b) not in (int, float):
+                raise ValueError("invalid add operands")
+            return a + b
+
+        def starts_with(value, prefix):
+            if not isinstance(value, str) or not isinstance(prefix, str):
+                raise ValueError("invalid startsWith operands")
+            return value.lower().startswith(prefix.lower())
+
+        def ends_with(value, suffix):
+            if not isinstance(value, str) or not isinstance(suffix, str):
+                raise ValueError("invalid endsWith operands")
+            return value.lower().endswith(suffix.lower())
+
+        def index_of(value, part):
+            if not isinstance(value, str) or not isinstance(part, str):
+                raise ValueError("invalid indexOf operands")
+            # Native WDL is case-insensitive. Lowercasing preserves the integer
+            # offsets for the ASCII strings used by our base64 guards.
+            return value.lower().find(part.lower())
+
+        def last(value):
+            if not isinstance(value, (str, list)) or not value:
+                raise ValueError("invalid last collection")
+            return value[-1]
+
         def ticks(value):
             # This interpreter supports only the UTC ISO values admitted by
             # these cases, retaining the seventh fractional tick digit.
@@ -193,11 +223,14 @@ class Expressions:
             "or": lambda *values: any(values), "contains": lambda value, part: part in value,
             "replace": lambda value, old, new: value.replace(old, new), "toLower": lambda value: value.lower(),
             "substring": lambda value, start, length: value[start:start + length],
-            "indexOf": lambda value, part: value.find(part),
+            "indexOf": index_of,
             "chunk": lambda value, size: [value[index:index + size] for index in range(0, len(value), size)],
             "length": lambda value: string_length(value) if isinstance(value, str) else len(value), "div": lambda a, b: a // b, "mul": lambda a, b: a * b,
             "sub": lambda a, b: a - b, "mod": lambda a, b: a % b, "if": lambda cond, yes, no: yes if cond else no,
-            "endsWith": lambda value, suffix: value.endswith(suffix),
+            "endsWith": ends_with,
+            # Documented WDL functions used by draft guards:
+            # https://learn.microsoft.com/azure/logic-apps/workflow-definition-language-functions-reference
+            "add": add, "startsWith": starts_with, "last": last,
             "trim": lambda value: value.strip(), "take": take,
             "greater": lambda a, b: a > b, "greaterOrEquals": lambda a, b: a >= b,
             "less": lambda a, b: a < b, "lessOrEquals": lambda a, b: a <= b,
@@ -320,7 +353,21 @@ class StaticContracts(unittest.TestCase):
                 self.assertTrue(set(node).isdisjoint({"pattern", "patternProperties"}))
             if isinstance(node, str) and node.startswith("@"):
                 self.assertLessEqual(string_length(node), 8192)
-        self.assertLessEqual(len(actions_in(SOURCE)), 250)
+        # Cloud-flow limits are 500 actions and 8 nesting levels, not 250.
+        # https://learn.microsoft.com/power-automate/limits-and-config#flow-definition-limits
+        self.assertLessEqual(len(actions_in(SOURCE)), 500)
+        def depth(actions, level=1):
+            maximum = level
+            for action in actions.values():
+                groups = [action["actions"]] if "actions" in action else []
+                if "else" in action:
+                    groups.append(action["else"]["actions"])
+                if "cases" in action:
+                    groups.extend(case["actions"] for case in action["cases"].values())
+                    groups.append(action["default"]["actions"])
+                maximum = max(maximum, *(depth(group, level + 1) for group in groups)) if groups else maximum
+            return maximum
+        self.assertLessEqual(depth(SOURCE["actions"]), 8)
 
     def test_format_guards_run_after_typed_bounded_schemas(self):
         for operation in ATTACHMENT_OPERATIONS:
@@ -372,18 +419,20 @@ class StaticContracts(unittest.TestCase):
         actual, required = {}, {}
         for name, fields in entries:
             parsed = re.findall(r"(\w+)(\?)?:\s*([^;\n]+)", fields)
-            actual[name] = {key: ("string" if value.strip().startswith("'") else "object" if value.strip() == "MailListFilters" else value.strip()) for key, optional, value in parsed}
+            actual[name] = {key: ("string" if value.strip().startswith("'") else "object" if value.strip() == "MailListFilters" else value.strip().split(" | ")[0]) for key, optional, value in parsed}
             required[name] = {key for key, optional, value in parsed if not optional}
-        expected = {name: {key: "number" if schema["type"] == "integer" else schema["type"] for key, schema in fields.items()} for name, fields in ARGUMENTS.items()}
+        all_arguments = {**ARGUMENTS, **DRAFT_ARGUMENTS}
+        all_required = {**REQUIRED_ARGS, **DRAFT_REQUIRED_ARGS}
+        expected = {name: {key: {"integer": "number", "array": "string[]"}.get(schema["type"], schema["type"]) for key, schema in fields.items()} for name, fields in all_arguments.items()}
         self.assertEqual(actual, expected)
-        self.assertEqual(required, {name: set(keys) for name, keys in REQUIRED_ARGS.items()})
+        self.assertEqual(required, {name: set(keys) for name, keys in all_required.items()})
         trigger = SOURCE["triggers"]["manual"]["inputs"]["schema"]
         self.assertEqual(set(trigger["properties"]["operation"]["enum"]), set(expected))
         cases = SOURCE["actions"]["スイッチ"]["cases"]
         self.assertEqual(set(cases), set(expected))
         for name in expected:
             schema = cases[name]["actions"][f"Validate_{name}_args"]["inputs"]["schema"]
-            self.assertEqual(schema["properties"], ARGUMENTS[name])
+            self.assertEqual(schema["properties"], all_arguments[name])
             self.assertEqual(set(schema["required"]), required[name])
             self.assertFalse(schema["additionalProperties"])
             envelope = cases[name]["actions"][f"Validate_{name}_request"]["inputs"]["schema"]
@@ -391,15 +440,24 @@ class StaticContracts(unittest.TestCase):
             self.assertFalse(envelope["additionalProperties"])
 
     def test_expansion_preserves_original_attachments_and_all_authentication(self):
-        # Mail branches are intentionally v2. Attachment cases stay byte-for-
-        # byte equivalent to their original canonical, sorted JSON contracts.
-        hashes = {
+        # Mail branches are intentionally v2. Pin original attachment content
+        # separately from the sole allowed lexical compatibility rewrite; all
+        # other values/topology/security/network content remain exact.
+        originals = {"list_attachments": list_case(), "get_attachment": get_case()}
+        original_hashes = {
             "list_attachments": "b47f9ee3526ff045892ede06bd3bc7941a24a1d0d621421b6c46f88156f2f6bc",
             "get_attachment": "ae381560356c8335ebf89337619edd15953020108d157473f2cbdf319a279894",
         }
-        for name, expected in hashes.items():
+        compatible_hashes = {
+            "list_attachments": "e484ea3792ce1087c460a95841103e808c3855acae94de938e9b5932ffb8261e",
+            "get_attachment": "4db4c27892b200b70c6445391933d9ff9f2b24619834cc00513ab8d82c07651d",
+        }
+        for name, expected in original_hashes.items():
+            original = json.dumps(originals[name], sort_keys=True, separators=(",", ":")).encode()
+            self.assertEqual(hashlib.sha256(original).hexdigest(), expected)
+            self.assertEqual(ATTACHMENT_CASES[name], transform_json(originals[name]))
             canonical = json.dumps(ATTACHMENT_CASES[name], sort_keys=True, separators=(",", ":")).encode()
-            self.assertEqual(hashlib.sha256(canonical).hexdigest(), expected)
+            self.assertEqual(hashlib.sha256(canonical).hexdigest(), compatible_hashes[name])
         original_trigger, expanded_trigger = deepcopy(BASELINE_SOURCE["triggers"]), deepcopy(SOURCE["triggers"])
         # Explicit v2 privacy addition. Every other trigger setting, including
         # the gateway-key condition and authentication, remains identical.
@@ -448,7 +506,8 @@ class StaticContracts(unittest.TestCase):
         self.assertEqual(actual, expected)
 
     def test_exact_fixed_get_network_allowlist(self):
-        network = [node for node in actions_in(SOURCE) if node["type"] == "OpenApiConnection" and node["inputs"]["host"]["operationId"] == "HttpRequest"]
+        read_cases = {name: case for name, case in SOURCE["actions"]["スイッチ"]["cases"].items() if name not in DRAFT_OPERATIONS}
+        network = [node for node in actions_in(read_cases) if node["type"] == "OpenApiConnection" and node["inputs"]["host"]["operationId"] == "HttpRequest"]
         self.assertEqual(len(network), 8)
         expected = [
             "", "", "messages/", "messages/", "messages/", "messages/",
