@@ -243,7 +243,7 @@ describe('Outlook read-tool security boundaries', () => {
       }),
       'PAGINATION_ORIGIN',
     ],
-    ['wrong route', nextLink({ path: '/v1.0/me/messages' }), 'PAGINATION_PATH'],
+    ['wrong route', nextLink({ path: '/v1.0/me/messages' }), 'PAGINATION_PATH_ME_MESSAGES'],
     ['wrong top', nextLink({ top: 4 }), 'PAGINATION_TOP'],
     [
       'unknown query',
@@ -296,12 +296,12 @@ describe('Outlook read-tool security boundaries', () => {
     [
       'extra path segment',
       nextLink({ path: '/v1.0/me/mailFolders/inbox/messages/extra' }),
-      'PAGINATION_PATH',
+      'PAGINATION_PATH_OTHER',
     ],
     [
       'different API version',
       nextLink({ path: '/beta/me/mailFolders/inbox/messages' }),
-      'PAGINATION_PATH',
+      'PAGINATION_PATH_OTHER',
     ],
     [
       'case-changed query key',
@@ -496,12 +496,56 @@ describe('Outlook read-tool security boundaries', () => {
       messages: [messageSummary],
       hasMore: true,
       nextCursor: null,
-      incompleteReason: paginationReason('PAGINATION_PATH'),
+      incompleteReason: paginationReason('PAGINATION_PATH_ME_FOLDER_SEGMENT'),
     })
     expect(records[0]?.args).toEqual({ top: 3, skip: 0, mailbox: 'inbox', folderId })
     expect(fetchFn).toHaveBeenCalledOnce()
     expect(JSON.stringify(result)).not.toContain(link)
   })
+
+  it.each([
+    ["/v1.0/me/mailfolders('SYNTHETIC_PRIVATE_CANARY')/messages", 'ME_FOLDER_ODATA'],
+    ['/v1.0/me/mailfolders(%27SYNTHETIC_PRIVATE_CANARY%27)/messages', 'ME_FOLDER_ODATA'],
+    ['/v1.0/me/mailfolders/SYNTHETIC_PRIVATE_CANARY/messages', 'ME_FOLDER_SEGMENT'],
+    ['/v1.0/users/SYNTHETIC_PRIVATE_CANARY/messages', 'USER_SEGMENT_MESSAGES'],
+    [
+      '/v1.0/users/SYNTHETIC_PRIVATE_CANARY/mailfolders/inbox/messages',
+      'USER_SEGMENT_FOLDER_SEGMENT',
+    ],
+    [
+      "/v1.0/users/SYNTHETIC_PRIVATE_CANARY/mailfolders('inbox')/messages",
+      'USER_SEGMENT_FOLDER_ODATA',
+    ],
+    ["/v1.0/users('SYNTHETIC_PRIVATE_CANARY')/messages", 'USER_ODATA_MESSAGES'],
+    [
+      "/v1.0/users('SYNTHETIC_PRIVATE_CANARY')/mailfolders/inbox/messages",
+      'USER_ODATA_FOLDER_SEGMENT',
+    ],
+    [
+      "/v1.0/users('SYNTHETIC_PRIVATE_CANARY')/mailfolders('inbox')/messages",
+      'USER_ODATA_FOLDER_ODATA',
+    ],
+    ["/v1.0/me/mailfolders('SYNTHETIC_PRIVATE_CANARY')/messages/delta", 'OTHER'],
+    ['/beta/users/SYNTHETIC_PRIVATE_CANARY/messages', 'OTHER'],
+    ['/v1.0/users/SYNTHETIC_PRIVATE_CANARY/contacts', 'OTHER'],
+  ])(
+    'classifies rejected shape %s without exposing or accepting its identity',
+    async (path, shape) => {
+      const link = nextLink({ path })
+      const { mcp, fetchFn } = await flow(() => ({ value: [message], '@odata.nextLink': link }))
+      const result = await call(mcp, 'outlook_list_messages', { limit: 3 })
+      expect(result.isError).not.toBe(true)
+      expect(result.structuredContent).toEqual({
+        messages: [messageSummary],
+        hasMore: true,
+        nextCursor: null,
+        incompleteReason: paginationReason(`PAGINATION_PATH_${shape}`),
+      })
+      expect(fetchFn).toHaveBeenCalledOnce()
+      expect(JSON.stringify(result)).not.toContain(CANARY)
+      expect(JSON.stringify(result)).not.toContain(link)
+    },
+  )
 
   it.each(['canonical', 'mixed-case'] as const)(
     'validates filtered folder pagination with the %s escaped route and no ordering',
@@ -559,7 +603,7 @@ describe('Outlook read-tool security boundaries', () => {
         path: '/v1.0/me/mailFolders/inbox/messages',
         filter: "conversationId eq 'conversation-1'",
       }),
-      'PAGINATION_PATH',
+      'PAGINATION_PATH_ME_FOLDER_SEGMENT',
     ],
     [
       'case-changed filter value',
