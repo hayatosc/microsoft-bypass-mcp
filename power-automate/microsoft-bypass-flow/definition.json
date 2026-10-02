@@ -8578,14 +8578,20 @@
                         },
                         "size": {
                           "type": "integer",
-                          "minimum": 1,
-                          "maximum": 2097152
+                          "minimum": 0,
+                          "maximum": 2147483647
+                        },
+                        "contentBytes": {
+                          "type": "string",
+                          "minLength": 4,
+                          "maxLength": 2796204
                         }
                       },
                       "required": [
                         "id",
                         "name",
-                        "size"
+                        "size",
+                        "contentBytes"
                       ]
                     }
                   },
@@ -8636,7 +8642,7 @@
                     ]
                   },
                   "inputs": {
-                    "content": "@and(and(not(equals(body('Validate_add_draft_attachment_result')?['id'], '.')), not(equals(body('Validate_add_draft_attachment_result')?['id'], '..')), equals(length(uriComponent(body('Validate_add_draft_attachment_result')?['id'])), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(body('Validate_add_draft_attachment_result')?['id']), '%0', string(null)), '%1', string(null)), '%20', string(null)), '%7F', string(null)), '%C2%85', string(null)), '%C2%A0', string(null)), '%E1%9A%80', string(null)), '%E2%80%80', string(null)), '%E2%80%81', string(null)), '%E2%80%82', string(null)), '%E2%80%83', string(null)), '%E2%80%84', string(null)), '%E2%80%85', string(null)), '%E2%80%86', string(null)), '%E2%80%87', string(null)), '%E2%80%88', string(null)), '%E2%80%89', string(null)), '%E2%80%8A', string(null)), '%E2%80%A8', string(null)), '%E2%80%A9', string(null)), '%E2%80%AF', string(null)), '%E2%81%9F', string(null)), '%E3%80%80', string(null)), '%EF%BB%BF', string(null))))), equals(body('Validate_add_draft_attachment_result')?['name'], body('Validate_add_draft_attachment_args')?['name']), equals(body('Validate_add_draft_attachment_result')?['size'], outputs('Compose_add_draft_attachment_size')))",
+                    "content": "@and(and(not(equals(body('Validate_add_draft_attachment_result')?['id'], '.')), not(equals(body('Validate_add_draft_attachment_result')?['id'], '..')), equals(length(uriComponent(body('Validate_add_draft_attachment_result')?['id'])), length(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(uriComponent(body('Validate_add_draft_attachment_result')?['id']), '%0', string(null)), '%1', string(null)), '%20', string(null)), '%7F', string(null)), '%C2%85', string(null)), '%C2%A0', string(null)), '%E1%9A%80', string(null)), '%E2%80%80', string(null)), '%E2%80%81', string(null)), '%E2%80%82', string(null)), '%E2%80%83', string(null)), '%E2%80%84', string(null)), '%E2%80%85', string(null)), '%E2%80%86', string(null)), '%E2%80%87', string(null)), '%E2%80%88', string(null)), '%E2%80%89', string(null)), '%E2%80%8A', string(null)), '%E2%80%A8', string(null)), '%E2%80%A9', string(null)), '%E2%80%AF', string(null)), '%E2%81%9F', string(null)), '%E3%80%80', string(null)), '%EF%BB%BF', string(null))))), equals(body('Validate_add_draft_attachment_result')?['name'], body('Validate_add_draft_attachment_args')?['name']), equals(length(body('Validate_add_draft_attachment_result')?['contentBytes']), length(body('Validate_add_draft_attachment_args')?['contentBytes'])), contains(body('Validate_add_draft_attachment_result')?['contentBytes'], body('Validate_add_draft_attachment_args')?['contentBytes']))",
                     "schema": {
                       "type": "boolean",
                       "enum": [
@@ -8705,7 +8711,7 @@
                         "draftId": "@body('Validate_add_draft_attachment_args')?['draftId']",
                         "attachmentId": "@body('Validate_add_draft_attachment_result')?['id']",
                         "name": "@body('Validate_add_draft_attachment_result')?['name']",
-                        "size": "@body('Validate_add_draft_attachment_result')?['size']"
+                        "size": "@sub(mul(div(length(body('Validate_add_draft_attachment_args')?['contentBytes']), 4), 3), if(endsWith(body('Validate_add_draft_attachment_args')?['contentBytes'], '=='), 2, if(endsWith(body('Validate_add_draft_attachment_args')?['contentBytes'], '='), 1, 0)))"
                       }
                     }
                   },

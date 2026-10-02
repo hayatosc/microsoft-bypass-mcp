@@ -18,9 +18,13 @@ First call `outlook_list_attachments`:
 
 It returns attachment ID, name, media type, Graph size, inline flag, attachment
 kind, supported format, eligibility (`readable`), `hasMore`, and `nextOffset`.
-Eligibility is based on metadata; inspect/read can still reject a malformed or
-unsupported file. Use the returned offset with the same message and limit. Offset
-paging can duplicate/skip items if the mailbox changes; inspect individual IDs
+Graph metadata size is not assumed to equal decoded raw-file length. Read-only
+list/inspect/read preserve Graph size in their outputs; inspect/read bound
+metadata size and raw bytes independently to 4 MiB each. Unlike the
+[draft-upload result](drafts.md), these tools do not project a verified raw-file
+`size`. Eligibility is based on metadata; inspect/read can still reject a
+malformed or unsupported file. Use the returned offset with the same message
+and limit. Offset paging can duplicate/skip items if the mailbox changes; inspect individual IDs
 when consistency matters. Never use an upstream nextLink as an input. At the
 10,000-offset cap `hasMore` may be true while `nextOffset` is null.
 

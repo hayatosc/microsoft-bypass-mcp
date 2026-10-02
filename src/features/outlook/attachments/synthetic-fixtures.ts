@@ -56,6 +56,20 @@ export function syntheticPdf() {
   pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`
   return strToU8(pdf)
 }
+/** Valid 889-byte DOCX with synthetic Graph metadata size 1223, not raw size. */
+export function syntheticGraphSizeAttachment() {
+  const file = syntheticAttachment('docx')
+  const binary = atob(file.contentBytes)
+  // fflate emits an empty ZIP comment. Replace its EOCD length and append a
+  // comment to reach the reproduction size without changing document content.
+  const commentLength = 889 - binary.length
+  const padded =
+    binary.slice(0, -2) +
+    String.fromCharCode(commentLength & 0xff, commentLength >> 8) +
+    ' '.repeat(commentLength)
+  return { ...file, size: 1223, contentBytes: btoa(padded) }
+}
+
 export function syntheticAttachment(format: 'pdf' | 'docx' | 'xlsx') {
   const bytes =
     format === 'pdf' ? syntheticPdf() : format === 'docx' ? syntheticDocx() : syntheticXlsx()

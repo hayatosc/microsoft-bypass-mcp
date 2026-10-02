@@ -92,6 +92,68 @@ equality, so sent mail is included when the account has access. The query does
 not include `$orderby`; the Worker may sort each returned page locally but must
 not claim global ordering. There is no inbox-only client-side fallback.
 
+### Sanitized message-shape rejection diagnostics
+
+`outlook_get_message` retains `malformed response: expected a message` and appends
+fixed shape codes in parentheses on normalization schema failure. Message summary
+lists (`outlook_list_messages` and `outlook_search_messages`) retain
+`malformed response: expected a list of messages` and use the same field codes,
+collapsed across entries. `outlook_get_conversation` retains
+`malformed response: expected conversation messages` and uses the same bounded
+helper in list mode, including detail/recipient field codes collapsed across
+messages. No rejected page or partially normalized message is returned. Existing
+schemas, error classes, requested page limits, the 50-item list ceiling, ID
+identity checks, conversation duplicate checks, sorting, and successful output
+remain unchanged. Folder normalization is not changed by this diagnostic.
+
+The finite field-prefix allowlist is:
+
+| Schema field or shape | Static code prefix |
+| --- | --- |
+| Message object | `MESSAGE` |
+| Message/folder/conversation IDs | `ID`, `PARENT_FOLDER_ID`, `CONVERSATION_ID` |
+| Subject and preview | `SUBJECT`, `BODY_PREVIEW` |
+| Sender object and email-address object | `FROM`, `FROM_EMAIL_ADDRESS` |
+| Sender name and address | `FROM_NAME`, `FROM_ADDRESS` |
+| Sent/received UTC timestamps | `SENT_DATE`, `RECEIVED_DATE` |
+| Booleans and importance | `HAS_ATTACHMENTS`, `IS_READ`, `IMPORTANCE` |
+| Body object, content type and content | `BODY`, `BODY_CONTENT_TYPE`, `BODY_CONTENT` |
+| To-recipient array, entry and email-address object | `TO_RECIPIENTS`, `TO_RECIPIENT`, `TO_EMAIL_ADDRESS` |
+| To-recipient name/address | `TO_NAME`, `TO_ADDRESS` |
+| Cc-recipient array, entry and email-address object | `CC_RECIPIENTS`, `CC_RECIPIENT`, `CC_EMAIL_ADDRESS` |
+| Cc-recipient name/address | `CC_NAME`, `CC_ADDRESS` |
+
+Each field prefix has only these suffixes: `_MISSING` (absent/undefined), `_NULL`,
+`_TYPE` (wrong schema type), or `_INVALID` (invalid format, enum string or bound).
+Only actual schema failures produce codes: already-supported null senders,
+nullable names/subjects/previews, optional metadata and omitted recipient arrays
+remain accepted. Message summary lists validate the existing **summary** schema
+only; body/to/cc detail codes are not added to summary-list validation.
+Conversation entries validate the existing **detail** schema.
+
+List envelope failures use `MESSAGE_LIST_ENVELOPE`, including invalid list/value
+shapes or nextLink type/length. Exceeding the existing schema/requested limit uses
+`MESSAGE_LIST_LIMIT`, never a count. Unknown paths or unrecognized failures use
+`MESSAGE_SHAPE_OTHER`. Codes are deduplicated and lexically ordered, independent
+of entry/recipient indices and input key order. At most 32 codes are returned;
+if needed the first 31 are followed by `MESSAGE_SHAPE_TRUNCATED`. The entire
+shape-rejection error is bounded to 1,024 characters. An abbreviated result is
+not a complete inventory of every rejection.
+
+For example, a **synthetic** message with a missing sender name, null sent time
+and malformed received time reports
+`FROM_NAME_MISSING,RECEIVED_DATE_INVALID,SENT_DATE_NULL`. These codes identify
+shape discrepancies, not mailbox identities, evidence of a particular tenant's
+behavior, or permission to accept a different schema. Any later normalization
+change requires separately reviewed evidence and authorization.
+
+Errors contain no input values, names, addresses, IDs, timestamps, subjects,
+body content, unknown keys/paths, array indices/counts, raw Zod messages/issues,
+or raw Graph payloads. There is no diagnostic logging: the transport telemetry
+whitelist remains only `type`, `requestId`, `operation`, `durationMs`, `status`,
+and `success`. Transport `success: true` can still precede a normalization
+rejection; this meaning is unchanged. Offline tests use synthetic fixtures only.
+
 ## Outlook attachment tools
 
 `outlook_list_attachments`, `outlook_inspect_attachment`, and

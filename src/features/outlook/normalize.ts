@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { PowerAutomateError } from '../../lib/power-automate.js'
+import { messageShapeDiagnostics } from './message-shape-diagnostics.js'
 import type { MessageDetail, MessageSummary, Recipient } from './schema.js'
 import { compareUtcTimestamps, messageIdSchema } from './schema.js'
 
@@ -128,8 +129,14 @@ function nonEmptyNextLink(link: string | undefined): string | null {
 }
 export function normalizeMessageList(body: unknown, requestedLimit = 50): MessageList {
   const parsed = graphMessageListSchema.safeParse(body)
-  if (!parsed.success || parsed.data.value.length > requestedLimit)
-    throw new PowerAutomateError('malformed response: expected a list of messages')
+  if (!parsed.success)
+    throw new PowerAutomateError(
+      `malformed response: expected a list of messages (${messageShapeDiagnostics(body, parsed.error.issues, true)})`,
+    )
+  if (parsed.data.value.length > requestedLimit)
+    throw new PowerAutomateError(
+      'malformed response: expected a list of messages (MESSAGE_LIST_LIMIT)',
+    )
   const nextLink = nonEmptyNextLink(parsed.data['@odata.nextLink'])
   return {
     messages: parsed.data.value.map(summary),
@@ -139,7 +146,10 @@ export function normalizeMessageList(body: unknown, requestedLimit = 50): Messag
 }
 export function normalizeMessage(body: unknown, requestedId?: string): MessageDetail {
   const parsed = graphMessageDetailSchema.safeParse(body)
-  if (!parsed.success) throw new PowerAutomateError('malformed response: expected a message')
+  if (!parsed.success)
+    throw new PowerAutomateError(
+      `malformed response: expected a message (${messageShapeDiagnostics(body, parsed.error.issues)})`,
+    )
   const message = detail(parsed.data)
   if (requestedId !== undefined && message.id !== requestedId)
     throw new PowerAutomateError('malformed response: message ID does not match')
@@ -151,8 +161,14 @@ export function normalizeConversation(
   requestedLimit = 50,
 ): ConversationList {
   const parsed = graphMessageDetailListSchema.safeParse(body)
-  if (!parsed.success || parsed.data.value.length > requestedLimit)
-    throw new PowerAutomateError('malformed response: expected conversation messages')
+  if (!parsed.success)
+    throw new PowerAutomateError(
+      `malformed response: expected conversation messages (${messageShapeDiagnostics(body, parsed.error.issues, true)})`,
+    )
+  if (parsed.data.value.length > requestedLimit)
+    throw new PowerAutomateError(
+      'malformed response: expected conversation messages (MESSAGE_LIST_LIMIT)',
+    )
   const messages = parsed.data.value.map(detail)
   if (messages.some((message) => message.conversationId !== conversationId))
     throw new PowerAutomateError('malformed response: conversation message ID does not match')

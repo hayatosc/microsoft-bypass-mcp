@@ -712,6 +712,15 @@ class ExecutionContracts(unittest.TestCase):
         self.assertEqual(response["body"], {"ok": True, "requestId": REQUEST_ID, "operation": "get_attachment", "data": metadata(contentBytes="YWJj")})
         self.assertEqual([call["Uri"] for call in flow.calls], [GRAPH_ROOT + "messages/message-id/attachments/attachment-id?$select=id,name,contentType,size,isInline", GRAPH_ROOT + "messages/message-id/attachments/attachment-id"])
 
+    def test_read_content_and_graph_size_remain_independently_bounded(self):
+        content = base64.b64encode(b"x" * 889).decode()
+        flow = get_flow(metadata(size=1223), metadata(size=1223, contentBytes=content))
+        response = flow.run()
+        self.assertEqual(response["statusCode"], 200)
+        self.assertEqual(response["body"]["data"]["size"], 1223)
+        self.assertEqual(response["body"]["data"]["contentBytes"], content)
+        self.assertEqual([call["Method"] for call in flow.calls], ["GET", "GET"])
+
     def test_each_id_is_a_separate_encoded_path_segment(self):
         flow = Flow("get_attachment", {"messageId": "a/b?x=1", "attachmentId": "%2e%2e/#"}, [metadata(id="%2e%2e/#"), metadata(id="%2e%2e/#", contentBytes="YWJj")])
         self.assertEqual(flow.run()["statusCode"], 200)
