@@ -51,15 +51,19 @@ still returned with `hasMore: true`, `nextCursor: null`, and an explicit
 `incompleteReason` containing only a fixed `PAGINATION_*` rejection code. This is
 safe degradation, not a promise that all native pagination shapes are supported.
 No rejected URL is followed or echoed, and no offset is invented from item count.
-Fixed Graph endpoint names allow case variation; caller-specified folder IDs and
-query values remain case-sensitive. Invalid caller cursors still fail before any
+Fixed Graph endpoint names allow case variation. The equivalent anchored
+`/me/mailFolders('key')/messages` OData form is accepted only for the exact
+already-selected key (with OData quote escaping and one key-only percent decode).
+Caller-specified folder IDs and query values remain case-sensitive; only implicit
+well-known folder aliases permit case variation. `/users/` routes and different
+opaque folder IDs are never treated as equivalent to `/me/` or an inbox alias. Invalid caller cursors still fail before any
 upstream request. Conversation pages use the same continuation behavior.
 
 Rejected path diagnostics use only fixed structural categories:
 `PAGINATION_PATH_{ME|USER_SEGMENT|USER_ODATA}_{MESSAGES|FOLDER_SEGMENT|FOLDER_ODATA}`,
 or `PAGINATION_PATH_OTHER`. They expose neither mailbox/folder keys nor URLs.
-These categories describe syntax, not identity or authorization: recognizing a
-parenthesized OData key or `/users/` route does not make that continuation valid.
+These categories describe syntax, not identity or authorization: a recognized
+OData key must still match the selected key, and `/users/` routes stay rejected.
 Origin checks run first; path rejection still prevents query/cursor acceptance.
 
 ### `outlook_search_messages`

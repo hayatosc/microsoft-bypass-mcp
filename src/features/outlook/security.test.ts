@@ -547,6 +547,280 @@ describe('Outlook read-tool security boundaries', () => {
     },
   )
 
+  it.each([
+    ['inbox alias', "/v1.0/me/mailfolders('inbox')/messages", 'inbox', undefined],
+    ['mixed-case inbox alias', "/V1.0/ME/MailFolders('INBOX')/Messages", 'inbox', undefined],
+    ['encoded inbox quotes', '/v1.0/me/mailfolders(%27inbox%27)/messages', 'inbox', undefined],
+    ['encoded inbox characters', "/v1.0/me/mailfolders('%69nbox')/messages", 'inbox', undefined],
+    ['sent alias', "/v1.0/me/mailfolders('sentitems')/messages", 'sent', undefined],
+    ['mixed-case sent alias', "/V1.0/ME/MailFolders('SentItems')/Messages", 'sent', undefined],
+    [
+      'explicit opaque ID',
+      "/v1.0/me/mailfolders('FolderCaseSensitive')/messages",
+      'all',
+      'FolderCaseSensitive',
+    ],
+    ['explicit alias spelling', "/v1.0/me/mailfolders('INBOX')/messages", 'all', 'INBOX'],
+    ['doubled apostrophe', "/v1.0/me/mailfolders('A''B')/messages", 'all', "A'B"],
+    [
+      'Unicode and encoded slash',
+      `/v1.0/me/mailfolders('${encodeURIComponent("資料/A'B+=😀").replace(/'/g, "''")}')/messages`,
+      'all',
+      "資料/A'B+=😀",
+    ],
+    [
+      'encoded quotes, Unicode and slash',
+      `/v1.0/me/mailfolders(%27${encodeURIComponent("資料/A'B+=😀").replace(/'/g, '%27%27')}%27)/messages`,
+      'all',
+      "資料/A'B+=😀",
+    ],
+    [
+      'literal percent sequence decoded once',
+      "/v1.0/me/mailfolders('Folder%252FCase')/messages",
+      'all',
+      'Folder%2FCase',
+    ],
+  ] as const)(
+    'accepts same-key OData %s with the same safe cursor as the canonical route',
+    async (_label, path, mailbox, folderId) => {
+      const canonicalPath = `/v1.0/me/mailFolders/${folderId === undefined ? (mailbox === 'sent' ? 'sentitems' : 'inbox') : encodeURIComponent(folderId)}/messages`
+      const link = nextLink({ path })
+      const canonicalLink = nextLink({ path: canonicalPath })
+      const { mcp, records, fetchFn } = await flow((_request, index) => ({
+        value: [message],
+        ...(index < 2 ? { '@odata.nextLink': index === 0 ? link : canonicalLink } : {}),
+      }))
+      const args = { limit: 3, mailbox, ...(folderId === undefined ? {} : { folderId }) }
+      const first = await call(mcp, 'outlook_list_messages', args)
+      expect(first.isError).not.toBe(true)
+      const cursor = cursorFrom(first)
+      expect(first.structuredContent).toEqual({
+        messages: [messageSummary],
+        hasMore: true,
+        nextCursor: cursor,
+        incompleteReason: null,
+      })
+      expect(decodeCursor(cursor)).toMatchObject({ operation: 'list_messages', limit: 3, skip: 73 })
+      expect(fetchFn).toHaveBeenCalledOnce()
+      const canonical = await call(mcp, 'outlook_list_messages', args)
+      expect(cursorFrom(canonical)).toBe(cursor)
+      const second = await call(mcp, 'outlook_list_messages', { ...args, cursor })
+      expect(second.isError).not.toBe(true)
+      expect(second.structuredContent).toEqual({
+        messages: [messageSummary],
+        hasMore: false,
+        nextCursor: null,
+        incompleteReason: null,
+      })
+      expect(records[2]?.args).toEqual({
+        top: 3,
+        skip: 73,
+        mailbox,
+        ...(folderId === undefined ? {} : { folderId }),
+      })
+      expect(fetchFn.mock.calls.map(([url]) => url)).toEqual([
+        `https://example.test/${CANARY}`,
+        `https://example.test/${CANARY}`,
+        `https://example.test/${CANARY}`,
+      ])
+      expect(JSON.stringify(first)).not.toContain(link)
+      expect(JSON.stringify(first)).not.toContain('graph.microsoft.com')
+      expect(JSON.stringify(decodeCursor(cursor))).not.toContain('mailfolders')
+      if (folderId !== undefined)
+        expect(JSON.stringify(decodeCursor(cursor))).not.toContain(folderId)
+    },
+  )
+
+  it.each([
+    ['unquoted key', '/v1.0/me/mailfolders(inbox)/messages', {}, 'OTHER'],
+    ['double-quoted key', '/v1.0/me/mailfolders(%22inbox%22)/messages', {}, 'OTHER'],
+    ['missing closing quote', "/v1.0/me/mailfolders('inbox)/messages", {}, 'OTHER'],
+    ['empty key', "/v1.0/me/mailfolders('')/messages", {}, 'ME_FOLDER_ODATA'],
+    [
+      'non-doubled apostrophe',
+      "/v1.0/me/mailfolders('A'B')/messages",
+      { folderId: "A'B" },
+      'ME_FOLDER_ODATA',
+    ],
+    [
+      'non-doubled encoded apostrophe',
+      '/v1.0/me/mailfolders(%27A%27B%27)/messages',
+      { folderId: "A'B" },
+      'ME_FOLDER_ODATA',
+    ],
+    ['trailing quoted-key content', "/v1.0/me/mailfolders('inbox'junk)/messages", {}, 'OTHER'],
+    [
+      'raw slash in opaque key',
+      "/v1.0/me/mailfolders('Folder/Case')/messages",
+      { folderId: 'Folder/Case' },
+      'OTHER',
+    ],
+    [
+      'malformed percent escape',
+      "/v1.0/me/mailfolders('Folder%ZZ')/messages",
+      { folderId: 'Folder%ZZ' },
+      'ME_FOLDER_ODATA',
+    ],
+    [
+      'malformed percent UTF-8',
+      "/v1.0/me/mailfolders('Folder%C0%AF')/messages",
+      { folderId: 'Folder%C0%AF' },
+      'ME_FOLDER_ODATA',
+    ],
+    [
+      'changed opaque key',
+      "/v1.0/me/mailfolders('DifferentFolder')/messages",
+      { folderId: 'FolderCaseSensitive' },
+      'ME_FOLDER_ODATA',
+    ],
+    [
+      'case-changed opaque key',
+      "/v1.0/me/mailfolders('foldercasesensitive')/messages",
+      { folderId: 'FolderCaseSensitive' },
+      'ME_FOLDER_ODATA',
+    ],
+    [
+      'case-changed explicit inbox ID',
+      "/v1.0/me/mailfolders('inbox')/messages",
+      { folderId: 'INBOX' },
+      'ME_FOLDER_ODATA',
+    ],
+    [
+      'case-changed explicit sent ID',
+      "/v1.0/me/mailfolders('SENTITEMS')/messages",
+      { folderId: 'sentitems' },
+      'ME_FOLDER_ODATA',
+    ],
+    [
+      'inbox alias replaced with returned parent ID',
+      "/v1.0/me/mailfolders('inbox-id')/messages",
+      {},
+      'ME_FOLDER_ODATA',
+    ],
+    [
+      'different well-known alias',
+      "/v1.0/me/mailfolders('sentitems')/messages",
+      {},
+      'ME_FOLDER_ODATA',
+    ],
+    [
+      'folder route for mailbox-wide scope',
+      "/v1.0/me/mailfolders('inbox')/messages",
+      { mailbox: 'all' },
+      'ME_FOLDER_ODATA',
+    ],
+    [
+      'user segment principal',
+      `/v1.0/users/${CANARY}/mailfolders('inbox')/messages`,
+      {},
+      'USER_SEGMENT_FOLDER_ODATA',
+    ],
+    [
+      'user OData principal',
+      `/v1.0/users('${CANARY}')/mailfolders('inbox')/messages`,
+      {},
+      'USER_ODATA_FOLDER_ODATA',
+    ],
+    ['encoded parentheses', '/v1.0/me/mailfolders%28%27inbox%27%29/messages', {}, 'OTHER'],
+    ['encoded endpoint name', "/v1.0/me/mail%66olders('inbox')/messages", {}, 'OTHER'],
+    ['encoded route separator', "/v1.0/me/mailfolders('inbox')%2Fmessages", {}, 'OTHER'],
+    ['encoded extra segment', "/v1.0/me/mailfolders('inbox')/messages%2Fdelta", {}, 'OTHER'],
+    [
+      'encoded slash changes key',
+      "/v1.0/me/mailfolders('inbox%2Fmessages')/messages",
+      {},
+      'ME_FOLDER_ODATA',
+    ],
+    [
+      'double-encoded slash does not match a decoded ID',
+      "/v1.0/me/mailfolders('Folder%252FCase')/messages",
+      { folderId: 'Folder/Case' },
+      'ME_FOLDER_ODATA',
+    ],
+    [
+      'double-encoded quoted literal',
+      '/v1.0/me/mailfolders(%2527inbox%2527)/messages',
+      {},
+      'OTHER',
+    ],
+    ['extra closing parenthesis', "/v1.0/me/mailfolders('inbox'))/messages", {}, 'OTHER'],
+    ['different API version', "/beta/me/mailfolders('inbox')/messages", {}, 'OTHER'],
+  ] as const)(
+    'rejects OData %s while preserving only the safe current page',
+    async (_label, path, args, shape) => {
+      const link = nextLink({ path })
+      const logs = vi.spyOn(console, 'log').mockImplementation(() => {})
+      const { mcp, fetchFn } = await flow(() => ({
+        value: [{ ...message, upstreamOnly: CANARY }],
+        '@odata.nextLink': link,
+      }))
+      const result = await call(mcp, 'outlook_list_messages', { limit: 3, ...args })
+      expect(result.isError).not.toBe(true)
+      expect(result.structuredContent).toEqual({
+        messages: [messageSummary],
+        hasMore: true,
+        nextCursor: null,
+        incompleteReason: paginationReason(`PAGINATION_PATH_${shape}`),
+      })
+      expect(fetchFn).toHaveBeenCalledOnce()
+      expect(fetchFn.mock.calls[0]?.[0]).toBe(`https://example.test/${CANARY}`)
+      expect(JSON.stringify(result)).not.toContain(link)
+      expect(JSON.stringify(result)).not.toContain(CANARY)
+      expect(JSON.stringify(logs.mock.calls)).not.toContain(link)
+      expect(JSON.stringify(logs.mock.calls)).not.toContain(CANARY)
+    },
+  )
+
+  it.each([
+    ['changed top', '$top', '4', 'PAGINATION_TOP'],
+    ['changed selection', '$select', 'id,body', 'PAGINATION_SELECT'],
+    ['changed ordering', '$orderby', 'receivedDateTime ASC', 'PAGINATION_ORDER'],
+    ['extra filter', '$filter', 'isRead eq true', 'PAGINATION_FILTER'],
+    ['unsupported search', '$search', CANARY, 'PAGINATION_QUERY_KEYS'],
+    ['unsupported skip token', '$skiptoken', CANARY, 'PAGINATION_QUERY_KEYS'],
+    ['non-progressing skip', '$skip', '0', 'PAGINATION_SKIP'],
+    ['skip above cap', '$skip', '10001', 'PAGINATION_SKIP'],
+  ])('still validates %s after accepting the OData path', async (_label, key, value, reason) => {
+    const url = new URL(nextLink({ path: "/v1.0/me/mailfolders('inbox')/messages" }))
+    url.searchParams.set(key, value)
+    const link = url.toString()
+    const { mcp, fetchFn } = await flow(() => ({ value: [message], '@odata.nextLink': link }))
+    const result = await call(mcp, 'outlook_list_messages', { limit: 3 })
+    expect(result.isError).not.toBe(true)
+    expect(result.structuredContent).toEqual({
+      messages: [messageSummary],
+      hasMore: true,
+      nextCursor: null,
+      incompleteReason: paginationReason(reason),
+    })
+    expect(fetchFn).toHaveBeenCalledOnce()
+    expect(JSON.stringify(result)).not.toContain(link)
+    expect(JSON.stringify(result)).not.toContain(CANARY)
+  })
+
+  it('rejects the same-folder OData path for a mailbox-wide conversation', async () => {
+    const link = nextLink({
+      path: "/v1.0/me/mailfolders('inbox')/messages",
+      conversation: true,
+      filter: "conversationId eq 'conversation-1'",
+    })
+    const { mcp, fetchFn } = await flow(() => ({ value: [message], '@odata.nextLink': link }))
+    const result = await call(mcp, 'outlook_get_conversation', {
+      conversationId: 'conversation-1',
+      limit: 3,
+    })
+    expect(result.isError).not.toBe(true)
+    expect(result.structuredContent).toEqual({
+      conversationId: 'conversation-1',
+      messages: [messageDetail],
+      hasMore: true,
+      nextCursor: null,
+      incompleteReason: paginationReason('PAGINATION_PATH_ME_FOLDER_ODATA'),
+    })
+    expect(fetchFn).toHaveBeenCalledOnce()
+    expect(JSON.stringify(result)).not.toContain(link)
+  })
+
   it.each(['canonical', 'mixed-case'] as const)(
     'validates filtered folder pagination with the %s escaped route and no ordering',
     async (routeCase) => {

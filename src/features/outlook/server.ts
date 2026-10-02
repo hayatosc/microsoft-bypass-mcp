@@ -219,7 +219,26 @@ function matchesGraphPath(
 ): boolean {
   const a = actual.split('/')
   const e = expected.split('/')
-  if (a.length !== e.length) return false
+  if (a.length !== e.length) {
+    // Graph also serializes the same folder key using OData key syntax. Decode
+    // only its quoted literal once, never the path or an alternate principal.
+    if (e.length !== 6) return false
+    const match = /^\/v1\.0\/me\/mailfolders\(([^/]*)\)\/messages$/i.exec(actual)
+    if (match?.[1] === undefined || e[4] === undefined) return false
+    let literal: string
+    let expectedKey: string
+    try {
+      literal = decodeURIComponent(match[1])
+      expectedKey = decodeURIComponent(e[4])
+    } catch {
+      return false
+    }
+    const key = /^'((?:[^']|'')*)'$/.exec(literal)?.[1]?.replace(/''/g, "'")
+    if (key === undefined) return false
+    return allowWellKnownFolder && (expectedKey === 'inbox' || expectedKey === 'sentitems')
+      ? key.toLowerCase() === expectedKey
+      : key === expectedKey
+  }
   return e.every((part, index) => {
     const fixed = index === 1 || index === 2 || index === 3 || index === 5
     const wellKnownFolder =
