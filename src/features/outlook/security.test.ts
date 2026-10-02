@@ -3,7 +3,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
 import { PowerAutomateClient } from '../../lib/power-automate.js'
-import { listFiltersSchema } from './schema.js'
+import {
+  getConversationOutputSchema,
+  getMessageOutputSchema,
+  listFiltersSchema,
+  listMessagesOutputSchema,
+  searchMessagesOutputSchema,
+} from './schema.js'
 import { createOutlookMcpServer } from './server.js'
 
 const SELECT =
@@ -45,6 +51,36 @@ const messageDetail = {
   body: message.body,
   untrustedContent: true,
 }
+const messageReadRoutes = [
+  {
+    name: 'outlook_get_message',
+    operation: 'get_message',
+    args: { messageId: message.id },
+    shape: 'a message',
+    outputSchema: getMessageOutputSchema,
+  },
+  {
+    name: 'outlook_list_messages',
+    operation: 'list_messages',
+    args: { mailbox: 'all', limit: 3 },
+    shape: 'a list of messages',
+    outputSchema: listMessagesOutputSchema,
+  },
+  {
+    name: 'outlook_search_messages',
+    operation: 'search_messages',
+    args: { mailbox: 'all', query: 'synthetic', limit: 3 },
+    shape: 'a list of messages',
+    outputSchema: searchMessagesOutputSchema,
+  },
+  {
+    name: 'outlook_get_conversation',
+    operation: 'get_conversation',
+    args: { conversationId: message.conversationId, limit: 3 },
+    shape: 'conversation messages',
+    outputSchema: getConversationOutputSchema,
+  },
+] as const
 const requestSchema = z.object({
   operation: z.string(),
   requestId: z.string().uuid(),
@@ -131,6 +167,104 @@ function encodeCursor(payload: Record<string, unknown>) {
 }
 
 describe('Outlook read-tool security boundaries', () => {
+  it.each(messageReadRoutes)(
+    'normalizes omitted from exactly like null for $name',
+    async (route) => {
+      const logs = vi.spyOn(console, 'log').mockImplementation(() => {})
+      const { from: _unused, ...withoutFrom } = message
+      const draft = { ...withoutFrom, sender: { emailAddress: { name: CANARY, address: CANARY } } }
+      const valid = { ...message, id: 'message-2', upstreamOnly: CANARY }
+      const { mcp, records, fetchFn } = await flow((_request, index) => {
+        const item = index === 0 ? draft : { ...draft, from: null }
+        return route.operation === 'get_message' ? item : { value: [valid, item] }
+      })
+      const omitted = await call(mcp, route.name, route.args)
+      const explicitNull = await call(mcp, route.name, route.args)
+      const emptySummary = { ...messageSummary, from: { name: '', address: '' } }
+      const emptyDetail = { ...messageDetail, from: { name: '', address: '' } }
+      const expected =
+        route.operation === 'get_message'
+          ? emptyDetail
+          : {
+              ...(route.operation === 'get_conversation'
+                ? { conversationId: message.conversationId }
+                : {}),
+              messages:
+                route.operation === 'get_conversation'
+                  ? [emptyDetail, { ...messageDetail, id: valid.id }]
+                  : [{ ...messageSummary, id: valid.id }, emptySummary],
+              hasMore: false,
+              nextCursor: null,
+              incompleteReason: null,
+            }
+      for (const result of [omitted, explicitNull]) {
+        expect(result.isError).not.toBe(true)
+        expect(route.outputSchema.parse(result.structuredContent)).toEqual(expected)
+        expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(expected) }])
+        expect(JSON.stringify(result)).not.toContain(CANARY)
+        expect(JSON.stringify(result)).not.toContain('emailAddress')
+      }
+      expect(omitted.structuredContent).toEqual(explicitNull.structuredContent)
+      expect(fetchFn).toHaveBeenCalledTimes(2)
+      expect(records.map((record) => record.operation)).toEqual([route.operation, route.operation])
+      expect(logs).toHaveBeenCalledTimes(2)
+      expect(JSON.stringify(logs.mock.calls)).not.toContain(CANARY)
+      expect(JSON.stringify(logs.mock.calls)).not.toContain('FROM_MISSING')
+    },
+  )
+
+  it.each(messageReadRoutes)(
+    'keeps sender failures and remaining diagnostics safe for $name',
+    async (route) => {
+      const logs = vi.spyOn(console, 'log').mockImplementation(() => {})
+      const { from: _unused, ...withoutFrom } = message
+      for (const [malformed, code] of [
+        [{ ...message, from: CANARY }, 'FROM_TYPE'],
+        [{ ...message, from: { emailAddress: null } }, 'FROM_EMAIL_ADDRESS_NULL'],
+        [{ ...withoutFrom, receivedDateTime: CANARY }, 'RECEIVED_DATE_INVALID'],
+      ] as const) {
+        logs.mockClear()
+        const { mcp, records, fetchFn } = await flow(() =>
+          route.operation === 'get_message'
+            ? malformed
+            : { value: [message, { ...malformed, id: 'message-2' }] },
+        )
+        const result = await call(mcp, route.name, route.args)
+        expect(result.isError).toBe(true)
+        expect(result.structuredContent).toBeUndefined()
+        expect(result.content).toEqual([
+          { type: 'text', text: `malformed response: expected ${route.shape} (${code})` },
+        ])
+        expect(fetchFn).toHaveBeenCalledOnce()
+        expect(records[0]?.operation).toBe(route.operation)
+        expect(logs).toHaveBeenCalledOnce()
+        const telemetry = z
+          .record(z.string(), z.unknown())
+          .parse(JSON.parse(z.string().parse(logs.mock.calls[0]?.[0])))
+        expect(Object.keys(telemetry).sort()).toEqual([
+          'durationMs',
+          'operation',
+          'requestId',
+          'status',
+          'success',
+          'type',
+        ])
+        expect(telemetry).toMatchObject({ operation: route.operation, status: 200, success: true })
+        expect(JSON.stringify(logs.mock.calls)).not.toContain(code)
+        for (const serialized of [JSON.stringify(result), JSON.stringify(logs.mock.calls)])
+          for (const forbidden of [
+            CANARY,
+            message.id,
+            message.subject,
+            'emailAddress',
+            'receivedDateTime',
+            'issues',
+          ])
+            expect(serialized).not.toContain(forbidden)
+      }
+    },
+  )
+
   it('continues at the validated Graph skip rather than the returned message count', async () => {
     const { mcp, records, fetchFn } = await flow((_request, index) => ({
       value: [message],
@@ -1175,6 +1309,12 @@ describe('Outlook read-tool security boundaries', () => {
       'search_messages',
       'FROM_NAME_MISSING,RECEIVED_DATE_INVALID,SENT_DATE_NULL',
     ],
+    [
+      'outlook_get_conversation',
+      { conversationId: message.conversationId, limit: 3 },
+      'get_conversation',
+      'BODY_CONTENT_TYPE_INVALID,FROM_NAME_MISSING,RECEIVED_DATE_INVALID,SENT_DATE_NULL',
+    ],
   ] as const)(
     'returns only safe combined shape codes for %s without diagnostic logging',
     async (name, args, operation, codes) => {
@@ -1201,7 +1341,7 @@ describe('Outlook read-tool security boundaries', () => {
       expect(result.content).toEqual([
         {
           type: 'text',
-          text: `malformed response: expected ${operation === 'get_message' ? 'a message' : 'a list of messages'} (${codes})`,
+          text: `malformed response: expected ${operation === 'get_message' ? 'a message' : operation === 'get_conversation' ? 'conversation messages' : 'a list of messages'} (${codes})`,
         },
       ])
       expect(fetchFn).toHaveBeenCalledOnce()

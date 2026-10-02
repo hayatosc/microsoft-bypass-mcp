@@ -92,6 +92,18 @@ equality, so sent mail is included when the account has access. The query does
 not include `$orderby`; the Worker may sort each returned page locally but must
 not claim global ordering. There is no inbox-only client-side fallback.
 
+### Sender normalization on message reads
+
+For `outlook_get_message`, `outlook_list_messages`, `outlook_search_messages`,
+and `outlook_get_conversation`, an omitted top-level `from` normalizes exactly
+like the already-supported `from: null`: `{ name: "", address: "" }`. This narrow
+correction is based on a verified sanitized `FROM_MISSING` rejection, not a
+universal guarantee that Graph omits `from` for drafts. No sender is inferred
+from `sender`, recipients, account identity, mailbox, or other properties.
+A present non-null `from` must still contain an `emailAddress` object with a
+required string-or-null `name` and required string `address`; a null name still
+normalizes to an empty string. Malformed present senders remain rejected.
+
 ### Sanitized message-shape rejection diagnostics
 
 `outlook_get_message` retains `malformed response: expected a message` and appends
@@ -101,10 +113,11 @@ lists (`outlook_list_messages` and `outlook_search_messages`) retain
 collapsed across entries. `outlook_get_conversation` retains
 `malformed response: expected conversation messages` and uses the same bounded
 helper in list mode, including detail/recipient field codes collapsed across
-messages. No rejected page or partially normalized message is returned. Existing
-schemas, error classes, requested page limits, the 50-item list ceiling, ID
-identity checks, conversation duplicate checks, sorting, and successful output
-remain unchanged. Folder normalization is not changed by this diagnostic.
+messages. No rejected page or partially normalized message is returned. Apart
+from the omitted-sender correction above, schema acceptance, error classes,
+requested page limits, the 50-item list ceiling, ID identity checks, conversation
+duplicate checks, sorting, and successful output remain unchanged. Folder
+normalization is not changed by this diagnostic.
 
 The finite field-prefix allowlist is:
 
@@ -125,7 +138,7 @@ The finite field-prefix allowlist is:
 
 Each field prefix has only these suffixes: `_MISSING` (absent/undefined), `_NULL`,
 `_TYPE` (wrong schema type), or `_INVALID` (invalid format, enum string or bound).
-Only actual schema failures produce codes: already-supported null senders,
+Only actual schema failures produce codes: omitted or null top-level senders,
 nullable names/subjects/previews, optional metadata and omitted recipient arrays
 remain accepted. Message summary lists validate the existing **summary** schema
 only; body/to/cc detail codes are not added to summary-list validation.

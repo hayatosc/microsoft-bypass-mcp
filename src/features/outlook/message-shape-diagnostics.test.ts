@@ -50,18 +50,25 @@ function errorText(run: () => unknown): string {
   throw new Error('Expected unchanged rejection')
 }
 function assertDiagnostic(body: unknown, code: string, list = false): void {
-  const text = errorText(() =>
-    list ? normalizeMessageList({ value: [body] }) : normalizeMessage(body),
-  )
-  expect(text).toBe(
-    `malformed response: expected ${list ? 'a list of messages' : 'a message'} (${code})`,
-  )
-  for (const forbidden of [
-    CANARY,
-    KEY_CANARY,
-    ...Object.values(message).filter((value) => typeof value === 'string'),
-  ])
-    expect(text).not.toContain(forbidden)
+  const routes = list
+    ? ([['a list of messages', () => normalizeMessageList({ value: [body] })]] as const)
+    : ([
+        ['a message', () => normalizeMessage(body)],
+        [
+          'conversation messages',
+          () => normalizeConversation({ value: [body] }, message.conversationId),
+        ],
+      ] as const)
+  for (const [shape, run] of routes) {
+    const text = errorText(run)
+    expect(text).toBe(`malformed response: expected ${shape} (${code})`)
+    for (const forbidden of [
+      CANARY,
+      KEY_CANARY,
+      ...Object.values(message).filter((value) => typeof value === 'string'),
+    ])
+      expect(text).not.toContain(forbidden)
+  }
 }
 
 const fields = [
@@ -75,7 +82,7 @@ const fields = [
     list: true,
   },
   { path: ['subject'], code: 'SUBJECT', wrong: {}, optional: false, nullable: true, list: true },
-  { path: ['from'], code: 'FROM', wrong: CANARY, optional: false, nullable: true, list: true },
+  { path: ['from'], code: 'FROM', wrong: CANARY, optional: true, nullable: true, list: true },
   {
     path: ['from', 'emailAddress'],
     code: 'FROM_EMAIL_ADDRESS',
@@ -320,7 +327,7 @@ describe('failure-only sanitized message shape diagnostics', () => {
   })
 
   it.each(fields.filter((field) => field.optional || field.nullable))(
-    'preserves already accepted omissions/nulls for $code',
+    'accepts only the declared omissions/nulls for $code',
     (field) => {
       if (field.optional) {
         expect(() => normalizeMessage(changed(field.path, undefined, true))).not.toThrow()
@@ -336,6 +343,26 @@ describe('failure-only sanitized message shape diagnostics', () => {
       }
     },
   )
+
+  it.each([
+    [123, 'FROM_TYPE'],
+    [false, 'FROM_TYPE'],
+    [[], 'FROM_TYPE'],
+    [{}, 'FROM_EMAIL_ADDRESS_MISSING'],
+    [{ emailAddress: CANARY }, 'FROM_EMAIL_ADDRESS_TYPE'],
+    [{ emailAddress: {} }, 'FROM_ADDRESS_MISSING,FROM_NAME_MISSING'],
+  ] as const)('keeps present malformed from rejected across shared routes: %j', (from, codes) => {
+    const body = { ...message, from, [KEY_CANARY]: CANARY }
+    assertDiagnostic(body, codes)
+    assertDiagnostic(body, codes, true)
+  })
+
+  it('does not hide remaining shape failures when from is omitted', () => {
+    const { from: _unused, ...withoutFrom } = message
+    const body = { ...withoutFrom, receivedDateTime: CANARY, [KEY_CANARY]: CANARY }
+    assertDiagnostic(body, 'RECEIVED_DATE_INVALID')
+    assertDiagnostic(body, 'RECEIVED_DATE_INVALID', true)
+  })
 
   it('returns unchanged valid outputs and strips unknown malicious keys', () => {
     const expected = {
