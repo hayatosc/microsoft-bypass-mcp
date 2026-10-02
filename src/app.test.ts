@@ -3,6 +3,7 @@ import { z } from 'zod'
 
 import app from './app.js'
 import { syntheticAttachment } from './features/outlook/attachments/synthetic-fixtures.js'
+import { TOOL_NAMES } from './features/outlook/server.js'
 import { getAccessConfig, getPowerAutomateGatewayKey, getPowerAutomateUrl } from './lib/env.js'
 
 const env = {
@@ -39,7 +40,6 @@ describe('mcp endpoint', () => {
 
 describe('attachment tools through Hono', () => {
   afterEach(() => vi.restoreAllMocks())
-
   it.each(['pdf', 'docx', 'xlsx'] as const)(
     'lists, inspects, and reads a synthetic %s through /mcp',
     async (format) => {
@@ -95,7 +95,7 @@ describe('attachment tools through Hono', () => {
         return envelope.result
       }
       const tools = await rpc('tools/list', {})
-      expect(tools.tools).toHaveLength(6)
+      expect(tools.tools?.map((tool) => tool.name).sort()).toEqual([...TOOL_NAMES].sort())
       const listing = await rpc('tools/call', {
         name: 'outlook_list_attachments',
         arguments: { messageId: 'msg-1' },
@@ -143,20 +143,14 @@ describe('env accessors', () => {
     expect(() => getPowerAutomateUrl({})).toThrow('POWER_AUTOMATE_URL')
     expect(() => getPowerAutomateGatewayKey({})).toThrow('POWER_AUTOMATE_GATEWAY_KEY')
   })
-
   it('returns null when Access is not configured', () => {
     expect(getAccessConfig({})).toBeNull()
   })
-
   it('returns the config when both Access values are set', () => {
     expect(
-      getAccessConfig({
-        TEAM_DOMAIN: 'https://team.cloudflareaccess.com',
-        POLICY_AUD: 'aud',
-      }),
+      getAccessConfig({ TEAM_DOMAIN: 'https://team.cloudflareaccess.com', POLICY_AUD: 'aud' }),
     ).toEqual({ domain: 'https://team.cloudflareaccess.com', aud: 'aud' })
   })
-
   it('fails fast on a partially configured Access pair', () => {
     expect(() => getAccessConfig({ TEAM_DOMAIN: 'https://team.cloudflareaccess.com' })).toThrow(
       'TEAM_DOMAIN',
