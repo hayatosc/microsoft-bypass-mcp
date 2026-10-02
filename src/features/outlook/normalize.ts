@@ -20,6 +20,7 @@ const graphRecipientSchema = z
   .passthrough()
 const nullableGraphRecipientSchema = graphRecipientSchema
   .nullable()
+  .optional()
   .transform((recipient) => recipient ?? { emailAddress: { name: '', address: '' } })
 const graphMessageSummarySchema = z
   .object({
