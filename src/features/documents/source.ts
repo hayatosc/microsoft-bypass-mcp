@@ -22,7 +22,8 @@ export interface DecodedDocument<TSource extends { format: DocumentFormat }> {
 }
 
 export function formatOf(name: string, contentType: string): DocumentFormat | null {
-  const extension = name.split('.').at(-1)?.toLowerCase()
+  const dot = name.lastIndexOf('.')
+  const extension = dot === -1 ? '' : name.slice(dot + 1).toLowerCase()
   const media = contentType.split(';')[0]?.trim().toLowerCase() ?? ''
   const generic = media === '' || media === 'application/octet-stream'
   if (extension === 'pdf' && (generic || media === 'application/pdf')) return 'pdf'
@@ -101,10 +102,12 @@ export async function readDocument<TSource extends { format: DocumentFormat }>(
       : readXlsx(entries, selection)
   if (
     data.format === 'xlsx' &&
-    data.cells.reduce(
-      (sum, cell) => sum + (typeof cell.value === 'string' ? cell.value.length : 0),
-      0,
-    ) > MAX_OUTPUT_CHARACTERS
+    data.cells.reduce((sum, cell) => {
+      const valueLength = typeof cell.value === 'string' ? cell.value.length : 0
+      // Preserve the existing budget for identical value/rawValue text.
+      const rawLength = cell.rawValue === cell.value ? 0 : (cell.rawValue?.length ?? 0)
+      return sum + valueLength + rawLength
+    }, 0) > MAX_OUTPUT_CHARACTERS
   )
     throw new DocumentSourceError('Selected cells exceed the text limit; request a smaller range')
   return { source: document.source, untrustedContent: true as const, data }
