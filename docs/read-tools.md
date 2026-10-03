@@ -1,289 +1,180 @@
-# Read tools
+# 読み取りツール
 
-The read tools in this document are read-only. The server also has separately
-documented [Outlook draft tools](drafts.md). It does
-not expose a generic Microsoft Graph proxy, a generic OneDrive proxy, arbitrary
-URLs, arbitrary methods, caller-supplied OData, download URLs, sharing links, or
-Power Automate nextLink replay.
+[README](../README.md) · [正式な仕様](../SPEC.md) · [下書きツール](drafts.md)
 
-## Shared behavior
+このガイドの 13 ツールは読み取り専用です。別に 3 つの下書きツールがありますが、メール送信はありません。汎用 Graph / OneDrive プロキシ、任意 URL・メソッド・OData・共有リンク・ダウンロード URL、nextLink の再実行は提供しません。
 
-- Every Worker-to-flow request is `{ operation, requestId, args }`.
-- `requestId` is the only caller correlation value that may appear in logs.
-- IDs are bounded to 1–2048 characters and reject controls, whitespace, NEL,
-  BOM, exact `.`, and exact `..`.
-- Queries are trimmed, nonempty, and at most 512 UTF-16 code units.
-- Outlook pages are bounded to 50 items; OneDrive pages are bounded to 100 items.
-- Text, message bodies, attachment extracts, and OneDrive extracts are untrusted
-  external content and include provenance in MCP output.
-- Raw Graph/native connector objects, base64, bytes, nextLink URLs, and download
-  URLs are not MCP output.
+## 共通の入力・出力
 
-## Outlook mail tools
+- Worker → フローの通信は `{ operation, requestId, args }`。ログに使える相関値は `requestId` だけです。
+- ID は 1〜2,048 文字。フローは制御文字、空白、NEL、BOM、完全一致の `.` / `..` を拒否します。
+- 検索語は trim 後に空でなく、最大 512 UTF-16 コード単位です。
+- MCP の 1 ページは Outlook 最大 50 件、OneDrive 最大 100 件。JSON 出力にも 128 KiB の上限があります。
+- 本文・ファイル名・抽出内容は信頼できない外部データです。出典を保持し、内容の指示を実行したり、操作の承認とみなしたりしません。
+- 生の Graph / ネイティブコネクタオブジェクト、base64、バイト列、nextLink URL、ダウンロード URL は MCP 出力に含めません。
+
+## Outlook のメール
+
+| ツール | MCP 入力 | 既定値・上限 |
+| --- | --- | --- |
+| `outlook_list_messages` | `limit`, `mailbox`, `folderId`, `cursor`, `filters`（すべて省略可） | `limit: 5`、最大 50、`mailbox: "inbox"` |
+| `outlook_search_messages` | `query`、省略可の `limit`, `mailbox`, `folderId` | `limit: 10`、最大 50、`mailbox: "inbox"` |
+| `outlook_get_message` | `messageId` | 1 メール |
+| `outlook_list_mail_folders` | 省略可の `limit` | 25、最大 50 |
+| `outlook_get_conversation` | `conversationId`、省略可の `limit`, `cursor` | 20、最大 50 |
 
 ### `outlook_list_messages`
 
-Lists message summaries from a fixed mailbox scope or folder.
+固定スコープまたはフォルダーから、メールの概要を取得します。
 
-Supported scope:
+| スコープ | 経路（Graph の `/v1.0` 配下） |
+| --- | --- |
+| `mailbox: "inbox"` | `/me/mailFolders/inbox/messages` |
+| `mailbox: "sent"` | `/me/mailFolders/sentitems/messages` |
+| `mailbox: "all"` | `/me/messages` |
+| `folderId` 指定 | `/me/mailFolders/{folderId}/messages`。`mailbox` より優先 |
 
-- `mailbox: "inbox"` -> inbox folder
-- `mailbox: "sent"` -> sent items folder
-- `mailbox: "all"` -> `/me/messages`
-- `folderId` -> `/me/mailFolders/{folderId}/messages`; overrides `mailbox`
+`filters` は `isRead`、`hasAttachments`、`receivedAfter`、`receivedBefore` だけです。日時は秒と最大 7 桁の小数秒（100 ナノ秒精度）を持つ UTC `Z` 形式。下限は上限より前で、`receivedAfter` はその時刻以降、`receivedBefore` はその時刻より前です。
 
-Supported filters are controlled only:
+フィルターがなければ `receivedDateTime desc` で取得します。空でないフィルターがあれば Graph の `InefficientFilter` を避けるため `$orderby` を省略します。フィルターの構築順は上記 4 項目で固定です。フィルター付きの結果を全体の時系列順とみなさないでください。
 
-- `isRead`
-- `hasAttachments`
-- `receivedAfter`
-- `receivedBefore`
+### 一覧・会話の継続カーソル
 
-Time bounds are UTC timestamps with seconds and up to seven fractional digits
-(100-nanosecond precision). The lower bound must be strictly before the upper.
+`nextCursor` は同じスコープ・フィルター・`limit` で使います。Worker は Graph の nextLink を取得先 URL として使わず、検証済みの数値 `$skip` だけを固定リクエストに変換します。offset は最大 10,000。メールボックスの変化による重複・取りこぼしを防ぐスナップショットではありません。
 
-When no filter is present, the flow uses `receivedDateTime desc`. When any
-filter is present, the flow omits `$orderby` to avoid Graph `InefficientFilter`
-failures. The fixed filter order is `isRead`, `hasAttachments`, `receivedAfter`,
-`receivedBefore`.
+継続情報を検証できなくても、有効な現在ページは返します。その場合は `hasMore: true`、`nextCursor: null` と、固定 `PAGINATION_*` コードを含む `incompleteReason` が付きます。これは安全に制限した結果であり、全件取得やすべての Graph 継続形式への対応を意味しません。拒否した URL をたどる・返す・件数から offset を推測することはありません。呼び出し元の不正カーソルは上流リクエスト前に拒否します。
 
-If the upstream continuation cannot be verified, the normalized current page is
-still returned with `hasMore: true`, `nextCursor: null`, and an explicit
-`incompleteReason` containing only a fixed `PAGINATION_*` rejection code. This is
-safe degradation, not a promise that all native pagination shapes are supported.
-No rejected URL is followed or echoed, and no offset is invented from item count.
-Fixed Graph endpoint names allow case variation. The equivalent anchored
-`/me/mailFolders('key')/messages` OData form is accepted only for the exact
-already-selected key (with OData quote escaping and one key-only percent decode).
-Caller-specified folder IDs and query values remain case-sensitive; only implicit
-well-known folder aliases permit case variation. `/users/` routes and different
-opaque folder IDs are never treated as equivalent to `/me/` or an inbox alias. Invalid caller cursors still fail before any
-upstream request. Conversation pages use the same continuation behavior.
+固定エンドポイント名の大文字・小文字の違いは許容します。OData の `/me/mailFolders('key')/messages` 形式も、既に選択したキーと完全一致する場合だけ受け付けます。キーの引用符エスケープと、キーだけの 1 回の percent decode を検証します。明示フォルダー ID とクエリ値は大文字・小文字も一致が必要で、暗黙の既知フォルダー別名だけが例外です。`/users/` や別の不透明なフォルダー ID を `/me/` や inbox と同一視しません。
 
-Rejected path diagnostics use only fixed structural categories:
-`PAGINATION_PATH_{ME|USER_SEGMENT|USER_ODATA}_{MESSAGES|FOLDER_SEGMENT|FOLDER_ODATA}`,
-or `PAGINATION_PATH_OTHER`. They expose neither mailbox/folder keys nor URLs.
-These categories describe syntax, not identity or authorization: a recognized
-OData key must still match the selected key, and `/users/` routes stay rejected.
-Origin checks run first; path rejection still prevents query/cursor acceptance.
+パス拒否の診断は構造カテゴリだけです。
+
+```text
+PAGINATION_PATH_{ME|USER_SEGMENT|USER_ODATA}_{MESSAGES|FOLDER_SEGMENT|FOLDER_ODATA}
+PAGINATION_PATH_OTHER
+```
+
+カテゴリは構文を示すだけで、ID・URL・認可を示しません。origin 検証を先に行い、パス拒否後にクエリやカーソルを受け入れることもありません。
 
 ### `outlook_search_messages`
 
-Searches a fixed mailbox scope or folder with connector-supported search text.
-It has no filters, skip, cursor following, or arbitrary query parameters.
-Search nextLink, if present, is treated only as a bounded incomplete signal.
+固定スコープまたはフォルダーを、コネクタが対応する検索テキストで検索します。フィルター、skip、カーソル、任意クエリパラメーターはありません。nextLink があっても先頭ページだけを返し、不完全な結果として示します。
 
 ### `outlook_get_message`
 
-Reads one message by ID using a fixed `/me/messages/{id}` route and selected
-fields only. It does not synthesize missing folder IDs, conversation IDs, or
-timestamps.
+固定 `/me/messages/{id}` から、選択したフィールドと本文を読みます。存在しないフォルダー ID、会話 ID、日時を補いません。依頼 ID と返却 ID の一致を検証し、本文には `untrustedContent: true` を付けます。
 
 ### `outlook_list_mail_folders`
 
-Lists the first bounded page of root folders from `/me/mailFolders`, selecting
-only folder metadata; child folders are not traversed. If Graph reports additional pages, the Worker reports an
-incomplete result; it does not expose or follow the nextLink URL.
+`/me/mailFolders` からルートフォルダーの先頭ページを返します。子フォルダーはたどりません。追加ページがあれば `hasMore` と `incompleteReason` で示しますが、継続カーソルは提供せず、nextLink もたどりません。
 
 ### `outlook_get_conversation`
 
-Reads messages across `/me/messages` with exact escaped `conversationId`
-equality, so sent mail is included when the account has access. The query does
-not include `$orderby`; the Worker may sort each returned page locally but must
-not claim global ordering. There is no inbox-only client-side fallback.
+`/me/messages` に対してエスケープ済み `conversationId` の完全一致条件で取得します。接続にアクセス権があれば送信済みメールも含みます。`$orderby` は付けず、返された各ページ内だけを時刻順（同時刻は ID）に整列します。会話全体の順序や完全性を保証しません。受信トレイの一部を取って代用する処理はありません。会話 ID 不一致とページ内の ID 重複は拒否します。
 
-### Sender normalization on message reads
+### 送信者の正規化
 
-For `outlook_get_message`, `outlook_list_messages`, `outlook_search_messages`,
-and `outlook_get_conversation`, an omitted top-level `from` normalizes exactly
-like the already-supported `from: null`: `{ name: "", address: "" }`. This narrow
-correction is based on a verified sanitized `FROM_MISSING` rejection, not a
-universal guarantee that Graph omits `from` for drafts. No sender is inferred
-from `sender`, recipients, account identity, mailbox, or other properties.
-A present non-null `from` must still contain an `emailAddress` object with a
-required string-or-null `name` and required string `address`; a null name still
-normalizes to an empty string. Malformed present senders remain rejected.
+メール取得・一覧・検索・会話では、トップレベルの `from` が**省略された場合も `null` の場合も**、`{ name: "", address: "" }` に正規化します。`sender`、宛先、アカウント、スコープ等から送信者を推測しません。
 
-### Sanitized message-shape rejection diagnostics
+非 null の `from` が存在する場合は、`emailAddress` オブジェクトと、必須の string-or-null `name`、必須の string `address` が必要です。`name: null` は空文字になりますが、欠落した名前などの不正な送信者は引き続き拒否します。「下書きでは常に Graph が `from` を省略する」という保証ではありません。既存資料の `FROM_MISSING` 確認記録は過去の限定的な記録です。
 
-`outlook_get_message` retains `malformed response: expected a message` and appends
-fixed shape codes in parentheses on normalization schema failure. Message summary
-lists (`outlook_list_messages` and `outlook_search_messages`) retain
-`malformed response: expected a list of messages` and use the same field codes,
-collapsed across entries. `outlook_get_conversation` retains
-`malformed response: expected conversation messages` and uses the same bounded
-helper in list mode, including detail/recipient field codes collapsed across
-messages. No rejected page or partially normalized message is returned. Apart
-from the omitted-sender correction above, schema acceptance, error classes,
-requested page limits, the 50-item list ceiling, ID identity checks, conversation
-duplicate checks, sorting, and successful output remain unchanged. Folder
-normalization is not changed by this diagnostic.
+### 内容を漏らさない形状エラー
 
-The finite field-prefix allowlist is:
+スキーマ検証に失敗したとき、次の既存エラー文に固定コードを括弧で付けます。不正ページや一部だけ正規化したメールは返しません。
 
-| Schema field or shape | Static code prefix |
+| 対象 | エラー文 |
 | --- | --- |
-| Message object | `MESSAGE` |
-| Message/folder/conversation IDs | `ID`, `PARENT_FOLDER_ID`, `CONVERSATION_ID` |
-| Subject and preview | `SUBJECT`, `BODY_PREVIEW` |
-| Sender object and email-address object | `FROM`, `FROM_EMAIL_ADDRESS` |
-| Sender name and address | `FROM_NAME`, `FROM_ADDRESS` |
-| Sent/received UTC timestamps | `SENT_DATE`, `RECEIVED_DATE` |
-| Booleans and importance | `HAS_ATTACHMENTS`, `IS_READ`, `IMPORTANCE` |
-| Body object, content type and content | `BODY`, `BODY_CONTENT_TYPE`, `BODY_CONTENT` |
-| To-recipient array, entry and email-address object | `TO_RECIPIENTS`, `TO_RECIPIENT`, `TO_EMAIL_ADDRESS` |
-| To-recipient name/address | `TO_NAME`, `TO_ADDRESS` |
-| Cc-recipient array, entry and email-address object | `CC_RECIPIENTS`, `CC_RECIPIENT`, `CC_EMAIL_ADDRESS` |
-| Cc-recipient name/address | `CC_NAME`, `CC_ADDRESS` |
+| メール詳細 | `malformed response: expected a message` |
+| 概要一覧・検索 | `malformed response: expected a list of messages` |
+| 会話 | `malformed response: expected conversation messages` |
 
-Each field prefix has only these suffixes: `_MISSING` (absent/undefined), `_NULL`,
-`_TYPE` (wrong schema type), or `_INVALID` (invalid format, enum string or bound).
-Only actual schema failures produce codes: omitted or null top-level senders,
-nullable names/subjects/previews, optional metadata and omitted recipient arrays
-remain accepted. Message summary lists validate the existing **summary** schema
-only; body/to/cc detail codes are not added to summary-list validation.
-Conversation entries validate the existing **detail** schema.
+コードの有限なプレフィックス:
 
-List envelope failures use `MESSAGE_LIST_ENVELOPE`, including invalid list/value
-shapes or nextLink type/length. Exceeding the existing schema/requested limit uses
-`MESSAGE_LIST_LIMIT`, never a count. Unknown paths or unrecognized failures use
-`MESSAGE_SHAPE_OTHER`. Codes are deduplicated and lexically ordered, independent
-of entry/recipient indices and input key order. At most 32 codes are returned;
-if needed the first 31 are followed by `MESSAGE_SHAPE_TRUNCATED`. The entire
-shape-rejection error is bounded to 1,024 characters. An abbreviated result is
-not a complete inventory of every rejection.
+| フィールド・形状 | プレフィックス |
+| --- | --- |
+| メールオブジェクト | `MESSAGE` |
+| メール・フォルダー・会話 ID | `ID`, `PARENT_FOLDER_ID`, `CONVERSATION_ID` |
+| 件名・プレビュー | `SUBJECT`, `BODY_PREVIEW` |
+| 送信者・emailAddress | `FROM`, `FROM_EMAIL_ADDRESS` |
+| 送信者名・アドレス | `FROM_NAME`, `FROM_ADDRESS` |
+| 送受信日時 | `SENT_DATE`, `RECEIVED_DATE` |
+| 真偽値・重要度 | `HAS_ATTACHMENTS`, `IS_READ`, `IMPORTANCE` |
+| 本文・型・内容 | `BODY`, `BODY_CONTENT_TYPE`, `BODY_CONTENT` |
+| To 配列・要素・emailAddress | `TO_RECIPIENTS`, `TO_RECIPIENT`, `TO_EMAIL_ADDRESS` |
+| To 名・アドレス | `TO_NAME`, `TO_ADDRESS` |
+| Cc 配列・要素・emailAddress | `CC_RECIPIENTS`, `CC_RECIPIENT`, `CC_EMAIL_ADDRESS` |
+| Cc 名・アドレス | `CC_NAME`, `CC_ADDRESS` |
 
-For example, a **synthetic** message with a missing sender name, null sent time
-and malformed received time reports
-`FROM_NAME_MISSING,RECEIVED_DATE_INVALID,SENT_DATE_NULL`. These codes identify
-shape discrepancies, not mailbox identities, evidence of a particular tenant's
-behavior, or permission to accept a different schema. Any later normalization
-change requires separately reviewed evidence and authorization.
+接尾辞は `_MISSING`（省略 / undefined）、`_NULL`、`_TYPE`（型違い）、`_INVALID`（形式・enum・範囲違い）だけです。実際の検証失敗だけを報告します。省略 / null のトップレベル送信者、nullable な名前・件名・プレビュー、省略可能なメタデータや宛先配列は引き続き受け入れます。概要一覧は概要スキーマのみ、会話は詳細スキーマを検証します。フォルダーの正規化はこの診断の対象外です。
 
-Errors contain no input values, names, addresses, IDs, timestamps, subjects,
-body content, unknown keys/paths, array indices/counts, raw Zod messages/issues,
-or raw Graph payloads. There is no diagnostic logging: the transport telemetry
-whitelist remains only `type`, `requestId`, `operation`, `durationMs`, `status`,
-and `success`. Transport `success: true` can still precede a normalization
-rejection; this meaning is unchanged. Offline tests use synthetic fixtures only.
+一覧 envelope の不正（value、nextLink の型・長さ等）は `MESSAGE_LIST_ENVELOPE`、スキーマまたは要求件数超過は `MESSAGE_LIST_LIMIT`、未知の失敗は `MESSAGE_SHAPE_OTHER`。コードを重複除去し辞書順に並べ、最大 32 個、必要なら先頭 31 個と `MESSAGE_SHAPE_TRUNCATED` に制限します。エラー全体は 1,024 文字以内で、すべての問題を網羅するとは限りません。
 
-## Outlook attachment tools
+合成データの例として、送信者名なし・送信日時 null・受信日時不正なら `FROM_NAME_MISSING,RECEIVED_DATE_INVALID,SENT_DATE_NULL` です。テナント固有の挙動や、別スキーマを許容してよいという根拠にはなりません。
 
-`outlook_list_attachments`, `outlook_inspect_attachment`, and
-`outlook_read_attachment` are documented in `docs/attachments.md`. Important
-points:
+診断には値、氏名、アドレス、ID、日時、件名、本文、未知キー・パス、配列添字・件数、生 Zod エラーや Graph payload を含めません。診断ログも追加しません。通信ログの `success: true` は、その後の正規化成功を意味しない点に注意してください。
 
-- Listing returns metadata only.
-- Content reads support file attachments only.
-- Reference/item attachments and external URLs are not followed.
-- Parser output is bounded and includes source provenance.
-- Raw base64 remains internal flow-to-Worker transport and is never MCP output.
+## Outlook の添付
 
-## OneDrive tools
+`outlook_list_attachments`、`outlook_inspect_attachment`、`outlook_read_attachment` の入力例と制約は [添付・ファイル解析](attachments.md) を参照してください。一覧はメタデータだけ、内容取得は fileAttachment だけです。item / reference 添付や外部 URL はたどらず、生 base64 はフロー → Worker 内部に限ります。
 
-OneDrive tools use the signed-in account's native OneDrive for Business
-connector. They are intentionally limited to owned-file/search/list/metadata and
-bounded content reads.
+## OneDrive
+
+接続所有者の OneDrive for Business をネイティブコネクタで扱います。共有ライブラリ、アクセスショートカット、任意 SharePoint ドライブ、共有リンクの追跡には対応しません。
 
 ### `onedrive_search_files`
 
-Uses native `FindFiles` with `query`, root binding, `findMode`, and
-`maxFileCount`. Results are metadata projections only. If the connector returns
-exactly the requested/maximum count, the result is conservatively marked
-potentially truncated; the server must not claim complete enumeration.
+MCP 入力は `query` と省略可の `limit`（既定 10、1〜100）。内部では native `FindFiles` の `query`、固定ルート、`findMode`、`maxFileCount` を使い、メタデータだけを返します。要求上限と同じ件数なら保守的に `truncated` とし、全件とは主張しません。
 
-The `OneDriveSearchMode` and `OneDriveSearchRootId` Compose configuration actions
-have fixed empty-string inputs by default. Search fails closed before connector access until both have
-verified tenant/designer values. Bind the native connection separately during an
-authorized manual update.
+`OneDriveSearchMode` と `OneDriveSearchRootId` の Compose 入力は初期状態で空です。対象デザイナーで固定値を確認し、許可された手動更新で設定するまではコネクタに接続する前に失敗します。接続のバインドも別途必要です。
 
-Native search exposes no supported continuation argument and returns at most 100
-results. No search cursor is implemented: paging slices of those same results
-would not retrieve matches beyond the connector cap. Narrow the query or browse
-a known folder when a search is incomplete.
+**検索は最大 100 件、継続入力も検索カーソルもありません。** 同じ結果を分割しても 100 件を超えた一致を取得できないためです。不完全なら検索語を絞るか、既知のフォルダーを一覧してください。
 
 ### `onedrive_list_folder`
 
-Uses `ListRootFolder` when no `folderId` is supplied and `ListFolderV2(id)` when
-one is supplied. For named folders, the native connector's supported pagination
-setting follows its own continuation tokens, with a threshold of 1,000 items.
-The flow projects at most 1,000 metadata records even when the final native page
-overshoots that threshold. Root listing is bounded to the returned array and does
-not claim supported native continuation for `ListRootFolder`.
+MCP 入力は省略可の `folderId`、`limit`（既定 50、1〜100）、`cursor`。`folderId` 省略時は `ListRootFolder`、指定時は `ListFolderV2(id)` を使います。
 
-The MCP `limit` remains 1–100 (default 50). `nextCursor` retrieves the next slice
-of that fixed bounded window. Each call re-fetches the window; there is no server
-cache. Cursors bind to the exact folder/root, limit, and a fingerprint of the
-ordered metadata window. A changed window rejects continuation: restart without
-a cursor. No cursor contains a folder ID, raw metadata, or an upstream URL.
+指定フォルダーはネイティブページングのしきい値 1,000 件で集約します。最後のページがしきい値を超えてもフローは最大 1,000 件に制限します。ルートは返却配列のみで、`ListRootFolder` のネイティブ継続対応は主張しません。
 
-`hasMore` includes both known records remaining in the window and possible
-upstream truncation. `nextCursor` exists only for known records in the window.
-At the window boundary, `hasMore: true` with `nextCursor: null` and an
-`incompleteReason` means more native data may exist but cannot be retrieved by
-this bounded operation. Reaching exactly 1,000 is conservatively incomplete;
-this is not unlimited enumeration or a stable snapshot of a changing drive.
+`nextCursor` は同じフォルダー / ルートと `limit` で、**その有限の集約範囲の次の部分**を読むためのものです。毎回、全範囲を取得し直します。カーソルはスコープと順序付きメタデータの fingerprint に結び付き、結果が変われば継続を拒否します。そのときはカーソルなしで最初から読み直してください。カーソルにフォルダー ID、生メタデータ、上流 URL は含めません。サーバーキャッシュもありません。
 
-The Worker never follows native nextLink URLs, and callers cannot supply them.
-A folder window has a 4 MiB transport ceiling; an over-limit response fails
-safely rather than silently dropping metadata. Normal MCP results still contain
-at most 100 records and remain subject to the shared output-size limit.
+- `hasMore` は、範囲内の既知の残りと上流の取得漏れの可能性を両方含みます。
+- `nextCursor` は、範囲内に既知の残りがある場合だけ返します。
+- 範囲末端で `hasMore: true` / `nextCursor: null` / `incompleteReason` があるなら、それ以上はこの操作で取得できません。
+- ちょうど 1,000 件でも保守的に不完全とします。無制限の列挙でも安定したスナップショットでもありません。
 
-Re-fetching can repeat multiple native requests on every page and consume the
-connector's request allowance. The published OneDrive connector limit is 100
-calls per 60 seconds; actual tenant behavior and aggregation latency need live
-verification. A timeout is a failed read, not evidence that enumeration is
-complete. Use a smaller folder where possible; this design deliberately adds no
-persistent cache.
+フォルダー集約の通信 JSON 上限は 4 MiB。超過は安全に失敗し、黙ってメタデータを捨てません。MCP 結果は最大 100 件で、128 KiB の出力上限も適用します。Worker は nextLink URL をたどらず、入力にも受け付けません。
 
-Sources: [OneDrive connector operations and limits](https://learn.microsoft.com/en-us/connectors/onedriveforbusiness/)
-and [native runtime pagination](https://learn.microsoft.com/en-us/azure/logic-apps/logic-apps-exceed-default-page-size-with-pagination).
+再取得は各ページで複数のネイティブ呼び出しを繰り返し、割り当てを消費し得ます。既存資料が参照する OneDrive コネクタの公表制限は 60 秒あたり 100 呼び出しですが、現行の契約・テナントの制限と集約遅延は別途確認してください。タイムアウトは失敗した読み取りであり、全件取得の証拠ではありません。可能なら小さなフォルダーで利用します。
+
+参考: [OneDrive コネクタの操作と制限](https://learn.microsoft.com/en-us/connectors/onedriveforbusiness/) / [ネイティブページング](https://learn.microsoft.com/en-us/azure/logic-apps/logic-apps-exceed-default-page-size-with-pagination)
 
 ### `onedrive_get_metadata`
 
-Uses `GetFileMetadata(id)`. The internal flow-to-Worker metadata projection is:
+MCP 入力は `fileId`。`GetFileMetadata(id)` を使い、フローと Worker で ID を検証します。内部の応答例:
 
 ```json
 { "Id": "...", "Name": "...", "Size": 1, "MediaType": "...", "IsFolder": false, "LastModified": "...", "ETag": "..." }
 ```
 
-The MCP result normalizes these to `fileId`, `name`, `size`, `contentType`,
-`isFolder`, `lastModifiedDateTime`, and `eTag`, plus `supportedFormat`, `readable`,
-and a nullable `limitation`. Missing optional timestamps/version tags stay null.
+MCP 出力は `fileId`、`name`、`size`、`contentType`、`isFolder`、`lastModifiedDateTime`、`eTag` と、`supportedFormat`、`readable`、nullable な `limitation`。省略された任意日時・版タグは null のままです。`Path`、`NameNoExt`、`DisplayName`、`FileLocator` は内部検証用で、MCP 出力に含めません。
 
-Other native fields such as `Path`, `NameNoExt`, `DisplayName`, and
-`FileLocator` are permitted only for internal validation/projection and are not
-part of MCP output.
+### `onedrive_inspect_file` / `onedrive_read_file`
 
-### `onedrive_inspect_file` and `onedrive_read_file`
+入力は `fileId`、read ではさらに `selection` が必要です。[添付と同じ選択形式](attachments.md#usage)を使います。両ツールは内部操作 `onedrive_get_content` を共有します。
 
-Both use `onedrive_get_content` as the transport operation. The flow fetches
-fresh metadata first, then rejects folders, empty files, files over 4 MiB, and
-unsupported types before downloading bytes. Supported file classes are PDF,
-DOCX, and XLSX with a supported extension and matching or generic MIME type.
-Both OneDrive and Outlook use the same document parsers. PDF structure parsing
-is delegated to PDF.js; the former 16 MiB PDF decoded-stream guarantee is removed.
-Raw file, page, selection and output caps remain. Timers cannot preempt synchronous
-parser work, and deployed platform CPU/memory limits still require verification.
-See [attachment limits](attachments.md#supported-subset-and-resource-limits) for the full details.
+Worker の先行メタデータ取得に加え、フローも最新メタデータを取得し、フォルダー、空ファイル、4 MiB 超、非対応拡張子・MIME 型をバイト取得前に拒否します。PDF / DOCX / XLSX のパーサーは Outlook 添付と共通です。
 
-Power Automate/Logic Apps binary bodies are expected as:
+Logic Apps のバイナリ表現:
 
 ```json
 { "$content-type": "...", "$content": "padded standard base64" }
 ```
 
-The flow treats `$content` as already-base64 data, validates it deliberately,
-and returns `{ metadata, contentBytes }` only to the Worker. The Worker compares
-fresh metadata to its first metadata call and enforces decoded byte limits again.
+`$content` は既に base64 です。フローは形式・MIME・復号サイズ等を検証して `{ metadata, contentBytes }` を Worker にだけ返し、Worker も先行メタデータとの一致と実バイト数を検証します。
 
-## Security notes
+PDF は PDF.js に構造解析を任せます。「復号ストリーム 16 MiB まで」の保証はありません。raw / ページ / 選択 / 出力上限は維持しますが、タイマーは同期処理を止められず、プラットフォームの CPU・メモリ確認が必要です。[解析の上限](attachments.md#resource-limits)を参照してください。
 
-- The flow uses secure inputs/outputs on supported data-bearing actions.
-- The Request trigger secures outputs so caller arguments/headers are hidden in
-  run history. This is obfuscation, not a guarantee about Microsoft retention.
-- Sanitized errors do not echo IDs, queries, subjects, names, URLs, raw connector
-  errors, bytes, or base64.
-- Flow run-history security settings are not a guarantee about Microsoft service
-  retention; review tenant retention separately.
-- Live import, connector binding, and smoke testing require separate authorization.
+## 運用上の注意
+
+フローは対応アクションの安全な入出力設定を使い、Request トリガーの出力（引数・ヘッダー）も実行履歴で隠します。これは露出の軽減であり、Microsoft の保持を保証しません。エラーは ID・検索語・名前・URL・生コネクタエラー・バイト列を返さず、Worker のログ項目も増やしません。
+
+ライブ import、接続のバインド、スモークテストには別途許可が必要です。このガイドや合成テストの成功を、ライブ接続確認とみなさないでください。
