@@ -1,107 +1,100 @@
-# University Microsoft 365 MCP — Specification
+# Microsoft 365 MCP — 仕様
 
-## 1. Overview
+[README](README.md) · [セットアップ](docs/setup.md) · [読み取り](docs/read-tools.md) · [下書き](docs/drafts.md)
 
-A fixed [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server
-that lets an LLM read selected university Microsoft 365 resources and save
-explicitly requested Outlook drafts through a
-Power Automate HTTP-trigger intermediary.
+## 1. 目的と対象
 
-The server is **not** a Microsoft Graph MCP. It is a fixed, allow-listed surface
-of read and draft-only tools that map onto fixed operations, which Power Automate turns into
-fixed Outlook Graph calls or native OneDrive for Business connector calls. The
-server never authenticates to Microsoft Graph and never talks to Graph directly.
+利用権限のある Microsoft 365 のメール・添付・所有ファイルを読み、明示的に依頼された Outlook 下書きを保存する、固定機能の [Model Context Protocol (MCP)](https://modelcontextprotocol.io) サーバーです。組織の許可を得た接続を個人で運用することを想定します。ライセンス、テナント、DLP、コネクタや外部 AI 利用の制約を回避するものではありません。
 
-## 2. Architecture
+汎用 Microsoft Graph MCP ではありません。Worker は Graph の認証や直接通信を行わず、Power Automate が固定の Outlook Graph 操作または OneDrive for Business のネイティブ操作を実行します。メール送信は提供しません。
 
-```
-MCP Client
+## 2. 構成と境界
+
+```text
+MCP クライアント
     ↓ MCP over Streamable HTTP (/mcp)
 Cloudflare Access
-    ↓ admitted request + Access JWT
-Remote MCP Server — Cloudflare Workers + Hono
+    ↓ 許可されたリクエスト + Access JWT
+Cloudflare Workers + Hono
     ↓ HTTP POST { operation, requestId, args }
-Power Automate — operation allowlist + connector actions
+Power Automate（操作の許可リスト + 固定コネクタ操作）
     ↓
-Microsoft 365 connectors
+Microsoft 365
 ```
 
-The boundary is fixed:
+対応付けは `MCP tool → fixed operation → Power Automate switch case → fixed read/draft action` です。任意の URL、ルート、HTTP メソッド、Graph の生リクエスト body、OData、drive ID、site ID、共有リンク、ダウンロード URL、nextLink URL を入力として受け付けません。
 
-```
-MCP tool -> fixed operation -> Power Automate switch case -> fixed read/draft action
-```
+Worker はリクエストごとに新しい MCP サーバーを生成します。メール・ファイル・抽出結果を DB / KV / R2 / キャッシュに永続化せず、バイト列はリクエスト内だけで扱います。ユーザーが保存を依頼した下書き・添付は Outlook に残ります。Access の署名鍵キャッシュはメール・ファイルの保存とは別です。
 
-No layer accepts a caller-provided URL, route, method, raw Graph body, Graph query, drive
-ID, site ID, share link, download URL, or nextLink URL.
+## 3. 認証とバインディング
 
-## 3. Authentication and environment
+本番の `/mcp` は Cloudflare Access の前段保護と、Worker 内の `Cf-Access-Jwt-Assertion` 検証を両方使います。署名鍵は `TEAM_DOMAIN` の `/cdn-cgi/access/certs` から取得し、署名・issuer・audience・有効期限を検証します。失敗時は HTTP 401 / `Unauthorized` です。
 
-`/mcp` is protected by Cloudflare Access and in-Worker validation of
-`Cf-Access-Jwt-Assertion`. Local development may omit `TEAM_DOMAIN` and
-`POLICY_AUD`; production must set both.
-
-| Variable | Required | Purpose |
+| バインディング | 必須条件 | 用途 |
 | --- | --- | --- |
-| `POWER_AUTOMATE_URL` | yes | Power Automate HTTP-trigger URL. |
-| `POWER_AUTOMATE_GATEWAY_KEY` | yes | Sent as `X-MCP-Gateway-Key`. |
-| `TEAM_DOMAIN` | prod | Cloudflare Access team domain. |
-| `POLICY_AUD` | prod | Access Application AUD tag. |
+| `POWER_AUTOMATE_URL` | 常に必要 | Power Automate HTTP トリガーの完全な URL |
+| `POWER_AUTOMATE_GATEWAY_KEY` | 常に必要 | `X-MCP-Gateway-Key` として送るキー |
+| `TEAM_DOMAIN` | 本番で必要 | Cloudflare Access のチーム URL |
+| `POLICY_AUD` | 本番で必要 | Access アプリケーションの AUD タグ |
 
-Secrets must not be committed.
+ローカル開発では `TEAM_DOMAIN` / `POLICY_AUD` を両方省略できます。その場合、Worker の認証検証は無効です。片方だけなら設定エラーになります。実装は本番を自動判別して必須化しないため、運用者が両方を設定する必要があります。
 
-## 4. Power Automate protocol
+秘密情報・実設定をコミットしません。Access アプリ・ポリシー、外部 OAuth とクライアント登録・接続条件は別途必要で、自動構築は同梱しません。詳しくは [セットアップ](docs/setup.md) を参照してください。
 
-Every request from the Worker to the flow uses this envelope:
+## 4. Power Automate 通信
+
+Worker はリクエストごとに UUID v4 の `requestId` を生成し、次の形式で POST します。
 
 ```json
 { "operation": "string", "requestId": "uuid-v4", "args": {} }
 ```
 
-The flow authenticates `X-MCP-Gateway-Key` before any Microsoft connector action.
-Success responses are:
+フローの `manual` トリガーは `Request` / `Http` です。既存の `triggerAuthenticationType: "All"` と次の条件を保持します。
+
+```text
+@and(not(empty(parameters('McpGatewayKey'))),equals(triggerOutputs()?['headers']?['X-MCP-Gateway-Key'],parameters('McpGatewayKey')))
+```
+
+フローの `McpGatewayKey` は `SecureString` で、公開既定値は空です。空なら処理を許可しません。非公開の実値を `POWER_AUTOMATE_GATEWAY_KEY` と一致させます。`スイッチ` は `@triggerBody()?['operation']` を参照し、各分岐で閉じた引数スキーマと UUID v4 を検証してからコネクタ処理を行います。
+
+成功応答:
 
 ```json
 { "ok": true, "requestId": "...", "operation": "...", "data": {} }
 ```
 
-Errors are non-2xx or sanitized `{ "ok": false, "error": { "code": "..." } }`.
-They must never include Graph/native connector raw errors, URLs, message IDs,
-file IDs, query text, subjects, body text, bytes, base64, or nextLink URLs.
+Worker は `requestId` と `operation` の一致を確認します。エラーは非 2xx、または秘匿化した `{ "ok": false, "error": { "code": "..." } }` です。Graph / ネイティブコネクタの生エラー、URL、メール・ファイル ID、検索語、件名、本文、バイト列、base64、nextLink をエラーに含めません。トリガー段階の拒否はプラットフォーム管理の応答になる場合があります。
 
-The flow has no storage, cache, loops over untrusted URLs, or persistence.
+フローにデータ保存・キャッシュ・任意 URL をたどるループはありません。Worker は POST を自動再試行せず、リダイレクトも追いません。既定の通信タイムアウトは 30 秒です。
 
-## 5. Fixed tool surface
+## 5. 固定ツール一覧
 
-The Worker-facing MCP surface contains 13 read-only tools and 3 draft-only tools:
+読み取り 13 ツール、下書き書き込み 3 ツールの計 16 ツールです。
 
-| Tool | Backing operation | Scope |
+| MCP ツール | フロー操作 | 範囲 |
 | --- | --- | --- |
-| `outlook_list_messages` | `list_messages` | Message summaries with controlled mailbox/folder/filter/page args. |
-| `outlook_search_messages` | `search_messages` | First bounded search page, no filters or cursor following. |
-| `outlook_get_message` | `get_message` | One selected message body. |
-| `outlook_list_mail_folders` | `list_mail_folders` | First bounded mail-folder page. |
-| `outlook_get_conversation` | `get_conversation` | Exact `conversationId` equality across `/me/messages`, including sent mail when accessible. |
-| `outlook_list_attachments` | `list_attachments` | Attachment metadata only. |
-| `outlook_inspect_attachment` | `get_attachment` | Worker parses one bounded file attachment. |
-| `outlook_read_attachment` | `get_attachment` | Worker extracts bounded attachment text/cells/pages. |
-| `outlook_create_draft` | `create_draft` | Save a new plain-text draft. |
-| `outlook_create_reply_draft` | `create_reply_draft` | Save a sender-reply draft without sending. |
-| `outlook_add_draft_attachment` | `add_draft_attachment` | Add a bounded file attachment to a verified draft. |
-| `onedrive_search_files` | `onedrive_search_files` | Native OneDrive owned-file search. |
-| `onedrive_list_folder` | `onedrive_list_folder` | Native bounded folder aggregation and scope/window-bound MCP pages. |
-| `onedrive_get_metadata` | `onedrive_get_metadata` | Native metadata projection. |
-| `onedrive_inspect_file` | `onedrive_get_content` | Worker parses one bounded OneDrive file. |
-| `onedrive_read_file` | `onedrive_get_content` | Worker extracts bounded OneDrive content. |
+| `outlook_list_messages` | `list_messages` | メール概要、固定スコープ・フィルター・ページ |
+| `outlook_search_messages` | `search_messages` | 検索の先頭ページのみ |
+| `outlook_get_message` | `get_message` | 指定メールの本文・詳細 |
+| `outlook_list_mail_folders` | `list_mail_folders` | ルートフォルダーの先頭ページ |
+| `outlook_get_conversation` | `get_conversation` | `/me/messages` 内の会話 ID 完全一致 |
+| `outlook_list_attachments` | `list_attachments` | 添付メタデータのみ |
+| `outlook_inspect_attachment` | `get_attachment` | Worker で添付の構造を解析 |
+| `outlook_read_attachment` | `get_attachment` | 添付の指定範囲を抽出 |
+| `outlook_create_draft` | `create_draft` | プレーンテキストの新規下書き保存 |
+| `outlook_create_reply_draft` | `create_reply_draft` | 元メールへの返信下書きを保存。全員への返信ではない |
+| `outlook_add_draft_attachment` | `add_draft_attachment` | 確認済み下書きへの小さな添付追加 |
+| `onedrive_search_files` | `onedrive_search_files` | 所有ファイルのネイティブ検索 |
+| `onedrive_list_folder` | `onedrive_list_folder` | 有限のフォルダー集約と、その範囲内のページ |
+| `onedrive_get_metadata` | `onedrive_get_metadata` | 必要なメタデータだけを返す |
+| `onedrive_inspect_file` | `onedrive_get_content` | Worker で所有ファイルの構造を解析 |
+| `onedrive_read_file` | `onedrive_get_content` | 所有ファイルの指定範囲を抽出 |
 
-The flow has 14 operations because Outlook inspect/read share `get_attachment`
-and OneDrive inspect/read share `onedrive_get_content`.
+添付と OneDrive の inspect / read がそれぞれ操作を共有するため、フローは 14 操作です。以下の `args` は内部通信形式です。MCP 入力の `limit` / `cursor` は Worker が `top` / `skip` 等に変換します。
 
-## 6. Outlook operations
+## 6. Outlook の読み取り操作
 
 ### `list_messages`
-
-Args:
 
 ```json
 {
@@ -118,118 +111,79 @@ Args:
 }
 ```
 
-`top` is `1..50`; `skip` is `0..10000`. If `folderId` is present, mailbox is
-ignored and the fixed route is `/me/mailFolders/{folderId}/messages`. Otherwise:
+上の文字列は選択肢・型の説明です。実際の `mailbox` は `inbox`、`sent`、`all` のいずれか 1 つです。`top` は `1..50`、`skip` は `0..10000`。`folderId` があれば `mailbox` より優先し、固定 `/me/mailFolders/{folderId}/messages` を使います。省略時の経路は次のとおりです（Graph の `/v1.0` 配下）。
 
-- `inbox` -> `/me/mailFolders/inbox/messages`
-- `sent` -> `/me/mailFolders/sentitems/messages`
-- `all` -> `/me/messages`
+- `inbox` → `/me/mailFolders/inbox/messages`
+- `sent` → `/me/mailFolders/sentitems/messages`
+- `all` → `/me/messages`
 
-`$select` order is exactly:
+概要の `$select` 順序:
 
 ```text
 id,subject,from,receivedDateTime,sentDateTime,parentFolderId,conversationId,hasAttachments,importance,isRead,bodyPreview
 ```
 
-Without filters, the query includes `$orderby=receivedDateTime desc`. With any
-nonempty controlled filter, `$orderby` is omitted to avoid Graph
-`InefficientFilter` combinations. Filter property order is fixed:
-`isRead`, `hasAttachments`, `receivedAfter`, `receivedBefore`. Caller-supplied
-OData is never accepted, and `$search` is never mixed with filters.
+フィルターなしなら `$orderby=receivedDateTime desc`。空でない限定フィルターがあれば Graph の `InefficientFilter` を避けるため `$orderby` を省略します。フィルター順は `isRead`、`hasAttachments`、`receivedAfter`、`receivedBefore` で固定です。日付は秒と最大 7 桁の小数秒を持つ UTC `Z` 形式で、下限は上限より前でなければなりません。受信日時の下限は `ge`、上限は `lt`。呼び出し元の OData は受け付けず、`$search` とフィルターを混ぜません。
 
-The returned Graph page may include `@odata.nextLink`; it is data only. The
-Worker validates the route/query shape and extracts only a numeric `$skip` cursor.
-The flow never accepts nextLink as input. Unsupported continuation metadata does
-not discard a valid bounded current page: return `hasMore: true`, `nextCursor:
-null`, and a fixed-code `incompleteReason`. Never claim completeness or invent an
-offset. Only fixed endpoint path segments permit case variation; explicit IDs
-and query values remain exact. Caller-cursor validation remains fail-closed.
+Graph の `@odata.nextLink` は内部データとしてのみ扱います。Worker は origin・パス・クエリを検証し、検証済みの数値 `$skip` だけをカーソルにします。フローや Worker に URL を入力して再実行する機能はありません。未対応の継続形式なら、有効な現在ページを保ち、`hasMore: true`、`nextCursor: null`、固定 `PAGINATION_*` コードを含む `incompleteReason` を返します。件数から offset を推測しません。呼び出し元の不正カーソルは取得前に拒否します。
+
+固定エンドポイント名だけ大文字・小文字の差を許容し、明示 ID とクエリ値は完全一致が必要です。OData のフォルダーキー形式や診断の詳細は [読み取りガイド](docs/read-tools.md) を参照してください。
 
 ### `search_messages`
 
-Args: `{ "query": "trimmed nonempty string, max 512", "top": 1..50,
-"mailbox"?: "inbox|sent|all", "folderId"?: "string" }`.
+内部 args は `{ "query": "trimmed nonempty string, max 512", "top": 1..50, "mailbox"?: "inbox|sent|all", "folderId"?: "string" }`。
 
-Route selection mirrors `list_messages`. There is no filter, skip, cursor, URL,
-method, route, or body argument. The first bounded page is returned only.
+経路選択は一覧と同じです。フィルター、skip、カーソル、任意 URL・メソッド・ルート・body は受け付けません。先頭ページだけを返し、nextLink は不完全な結果の信号としてのみ扱います。
 
 ### `get_message`
 
-Args: `{ "messageId": "bounded ID" }`.
-
-Fixed route `/me/messages/{messageId}` with selected fields:
+内部 args は `{ "messageId": "bounded ID" }`。固定 `/me/messages/{messageId}` を使います。詳細の `$select` は、現在の生成ソースでは概要に `toRecipients,ccRecipients,body` を続けた順序です。
 
 ```text
-id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,parentFolderId,conversationId,hasAttachments,importance,isRead,bodyPreview,body
+id,subject,from,receivedDateTime,sentDateTime,parentFolderId,conversationId,hasAttachments,importance,isRead,bodyPreview,toRecipients,ccRecipients,body
 ```
+
+返された ID の一致を検証します。`from` が省略または `null` なら `{ name: "", address: "" }` に正規化します。他の属性から送信者を推測しません。非 null の `from` がある場合は `emailAddress` オブジェクト、必須の string-or-null `name`、必須の string `address` を要求し、不正な送信者は拒否します。`name: null` は空文字になります。この規則は概要一覧・検索・会話にも共通です。
 
 ### `list_mail_folders`
 
-Args: `{ "top": 1..50 }`.
+内部 args は `{ "top": 1..50 }`。固定 `/me/mailFolders` から、次のフィールドを選択します。
 
-Fixed route `/me/mailFolders` with `$top` and selected fields
-`id,displayName,parentFolderId,childFolderCount,totalItemCount,unreadItemCount`.
-The Worker reports bounded/incomplete if the page has a nextLink; it does not
-follow the URL.
+```text
+id,displayName,parentFolderId,childFolderCount,totalItemCount,unreadItemCount
+```
+
+子フォルダーを再帰的に取得しません。nextLink があれば不完全と報告し、URL は返さず、たどりません。
 
 ### `get_conversation`
 
-Args: `{ "conversationId": "bounded ID", "top": 1..50, "skip": 0..10000 }`.
-
-Fixed route `/me/messages`, so sent mail is included when accessible. The query
-uses exact escaped OData equality:
+内部 args は `{ "conversationId": "bounded ID", "top": 1..50, "skip": 0..10000 }`。固定 `/me/messages` を使うので、接続からアクセス可能なら送信済みメールも含みます。
 
 ```text
 $filter=conversationId eq '<single-quote-doubled conversationId>'
 ```
 
-It uses the same detail `$select` as `get_message`. It deliberately has **no
-`$orderby`** because mixing `conversationId` filter with received-date order can
-violate Graph `InefficientFilter` requirements. The Worker may sort each returned
-page locally, but must not claim global ordering. No mailbox-slice fallback is
-allowed. The Worker rejects returned messages whose `conversationId` differs and
-rejects duplicate IDs within a returned page.
+詳細の `$select` は `get_message` と同じです。`InefficientFilter` を避けるため **`$orderby` は付けません**。Worker は返されたページ内だけを時刻順に整列し、会話全体の順序を保証しません。受信トレイの部分取得による代替は行わず、会話 ID 不一致とページ内 ID 重複を拒否します。
 
-### Attachment operations
+### 添付
 
-`list_attachments` and `get_attachment` preserve the attachment contract in
-`docs/attachments.md`. The flow uses only fixed message attachment Graph routes,
-never follows reference URLs or nextLink, never returns list `contentBytes`, and
-returns `contentBytes` only as internal Worker transport for file attachments.
+`list_attachments` / `get_attachment` は [添付ガイド](docs/attachments.md) の契約に従います。固定のメール添付経路だけを使い、reference URL や nextLink はたどりません。一覧に `contentBytes` を返さず、fileAttachment の内容取得時のみ Worker 内部への通信に使います。読み取りの Graph `size` と実バイト数は同じとはみなさず、それぞれ独立に 4 MiB まで検証します。
 
-## 7. OneDrive native operations
+## 7. OneDrive のネイティブ操作
 
-OneDrive operations use only the signed-in account's native OneDrive for Business
-connector, not Outlook HTTP and not Graph proxy routes.
+対象は接続所有者の OneDrive for Business 内の所有ファイルです。Outlook HTTP コネクタや Graph プロキシ経路は使いません。許可する操作 ID は次のとおりです。
 
-Allowed native operation IDs are:
-
-- `FindFiles(query,id,findMode,maxFileCount)` with `maxFileCount` `1..100`
+- `FindFiles(query,id,findMode,maxFileCount)` — `maxFileCount` は `1..100`
 - `GetFileMetadata(id)`
 - `GetFileContent(id,inferContentType)`
 - `ListFolderV2(id)`
 - `ListRootFolder()`
 
-The generated public source uses visible placeholders for values that require
-manual tenant/designer verification during authorized import:
+`shared_onedriveforbusiness` を所有者の接続に手動で結び付けます。公開ソースには接続 ID や認証秘密情報はありません。検索用 Compose の `OneDriveSearchMode`（確認済み `findMode` 機械値）と `OneDriveSearchRootId`（ネイティブルート ID）は空の固定入力で生成されます。許可された設定作業で確認・入力するまでは HTTP 503 で検索を拒否します。
 
-- `OneDriveSearchMode` for the verified native `findMode` machine value
-- `OneDriveSearchRootId` for the connection owner's native root folder ID
+### メタデータ
 
-Both are named Compose configuration actions with fixed empty-string inputs. Search fails closed with
-HTTP 503 before any connector action until both are set during authorized setup.
-The connector alias `shared_onedriveforbusiness` must also be bound to the owner's
-connection; this source contains no connection ID or authentication secret.
-
-The flow must not accept arbitrary drive IDs, site IDs, share links, web URLs,
-download URLs, provider URLs, route, method, body, or nextLink fields.
-
-### Metadata projection
-
-Native OneDrive metadata can contain `Id`, `Name`, `Size`, `MediaType`,
-`IsFolder`, `LastModified`, `ETag`, `Path`, `NameNoExt`, `DisplayName`, and
-`FileLocator`. The flow projects only these permitted metadata fields internally
-and returns only:
+ネイティブ応答の `Path`、`NameNoExt`、`DisplayName`、`FileLocator` は内部検証用に許容しますが、外へ返すのは以下だけです。
 
 ```ts
 type OneDriveMetadata = {
@@ -243,127 +197,68 @@ type OneDriveMetadata = {
 }
 ```
 
+MCP 出力では `fileId`、`name`、`size`、`contentType`、`isFolder`、`lastModifiedDateTime`、`eTag` に正規化し、`supportedFormat`、`readable`、`limitation` を加えます。
+
 ### `onedrive_search_files`
 
-Args: `{ "query": "trimmed nonempty string, max 512", "top": 1..100 }`.
-
-Returns a bounded page with `value` and `truncated`. Native nextLink presence is
-folded into that flag without exposing the URL. If native `FindFiles`
-returns exactly the connector/requested maximum, the result is conservatively
-marked potentially truncated; the server must not claim complete enumeration.
-Native search has no supported continuation input; no artificial search cursor
-is provided, and this extension does not expand search beyond its 100-result cap.
+内部 args は `{ "query": "trimmed nonempty string, max 512", "top": 1..100 }`。生成フローは native `FindFiles` の配列を上限まで選択して `value` と `truncated` を返します。件数が要求上限と同じなら、保守的に取得漏れの可能性を示します。Worker は継続の存在を示す情報も不完全判定に使いますが、ネイティブ検索の継続入力は提供しません。**最大 100 件で、検索カーソルはありません**。
 
 ### `onedrive_list_folder`
 
-Internal args: `{ "folderId"?: "bounded ID", "top": 1..1000 }`.
-The Worker always requests a fixed 1,000-record window; MCP input `limit` remains
-1–100 and optional `cursor` is interpreted only by the Worker.
+内部 args は `{ "folderId"?: "bounded ID", "top": 1..1000 }`。Worker は常に固定 1,000 件の集約範囲を要求し、MCP の `limit` は `1..100` のままです。
 
-Omitted `folderId` uses `ListRootFolder`; present `folderId` uses
-`ListFolderV2(id)` with its supported native `paginationPolicy.minimumItemCount`
-set to 1,000. Runtime aggregation may overshoot the threshold; flow projection
-still takes at most 1,000. Reaching the cap or native continuation is flagged
-incomplete. No unverified pagination setting is added to `ListRootFolder`.
+`folderId` 省略時は `ListRootFolder`、指定時は `ListFolderV2(id)`。指定フォルダーだけ `paginationPolicy.minimumItemCount: 1000` によるネイティブページングを使います。これは最小しきい値なので最後のページが超過することがありますが、フローは最大 1,000 件に切って返します。しきい値到達やネイティブ継続があれば不完全とします。ルートには未確認のページング設定を追加しません。
 
-The Worker validates at most 1,000 records within a 4 MiB transport ceiling,
-then returns at most the requested MCP limit. A canonical opaque cursor binds
-version, operation, folder/root scope, limit, ordered-window fingerprint, and a
-bounded offset. Each continuation re-fetches and validates the same window;
-changed scope/limit, stale windows, duplicate IDs, and out-of-range offsets fail
-safely. No metadata is cached. Only known remaining records yield `nextCursor`;
-upstream incompleteness can leave `hasMore: true` with no usable cursor. This
-expands named-folder coverage beyond one native page but not beyond the bounded
-window. Native nextLink is never returned, caller-supplied, or followed by the
-Worker. See [`docs/read-tools.md`](docs/read-tools.md) for caller behavior.
+Worker は 4 MiB の通信上限内で最大 1,000 件を検証し、要求した MCP 件数だけを返します。カーソルは version・operation・folder/root のスコープ・limit・順序付き集約結果の fingerprint・有限 offset に結び付きます。**継続呼び出しごとに集約範囲を取得し直し**、変更、重複 ID、不正 offset を拒否します。保存・キャッシュはありません。カーソルは認可の証明ではありません。
+
+`nextCursor` は取得済み範囲内の残りがある場合だけ返します。取得済み範囲を読み終えても上流が不完全なら、`hasMore: true`、`nextCursor: null` になります。無制限の列挙や変化しないスナップショットではありません。Worker はネイティブ nextLink URL を返さず、受け付けず、たどりません。[利用上の詳細](docs/read-tools.md#onedrive_list_folder)も参照してください。
 
 ### `onedrive_get_metadata`
 
-Args: `{ "fileId": "bounded ID" }`.
-
-Uses `GetFileMetadata(id)` and verifies the returned identity when exposed.
-The Worker verifies identity again.
+内部 args は `{ "fileId": "bounded ID" }`。`GetFileMetadata(id)` の返却 ID をフローと Worker で検証します。
 
 ### `onedrive_get_content`
 
-Args: `{ "fileId": "bounded ID" }`.
+内部 args は `{ "fileId": "bounded ID" }`。フローは最新メタデータで ID、`IsFolder=false`、`0 < Size <= 4 MiB`、PDF / DOCX / XLSX の拡張子と一致または汎用 MIME 型を確認してから `GetFileContent(id,inferContentType=true)` を呼びます。
 
-The flow first fetches fresh metadata, validates identity, `IsFolder=false`,
-`0 < Size <= 4 MiB`, and a supported PDF/DOCX/XLSX extension with a matching or generic MIME type. Only
-then does it call `GetFileContent(id,inferContentType=true)`.
-
-Microsoft Logic Apps represents binary bodies as:
+Logic Apps のバイナリ表現:
 
 ```json
 { "$content-type": "...", "$content": "base64..." }
 ```
 
-`$content` is already padded standard base64. The flow validates this shape,
-base64 alphabet/padding, encoded length, and decoded length before returning:
+`$content` は既にパディング付き標準 base64 です。フローは型・文字集合・パディング・符号化長・復号後の長さとメタデータの一致を検証し、Worker にだけ `{ metadata, contentBytes }` を返します。オブジェクト全体を base64 化しません。Worker は先行メタデータ取得との一致と復号サイズを再確認します。生コネクタオブジェクト、共有リンク、アクセスショートカット、無制限のバイト列は返しません。
 
-```json
-{ "metadata": { ...fresh projected metadata... }, "contentBytes": "base64" }
-```
+## 8. 共通検証と文書の制約
 
-The Worker compares returned metadata with its prior metadata call and enforces
-decoded size again. The flow must not base64-encode an object accidentally, and
-must never return raw body bytes, raw native connector objects, sharing links,
-access shortcuts, or unbounded bytes.
+フロー引数は操作ごとの閉じたスキーマです。ID は `1..2048` 文字で、制御文字、空白、NEL `U+0085`、BOM `U+FEFF`、完全一致の `.` / `..` を拒否します。パス ID は `uriComponent` で個別に符号化し、入力の `%` も再符号化するため構造上の区切りになりません。
 
-## 8. Shared validation rules
+検索語は trim 後に空でなく、最大 512 UTF-16 コード単位。通常の MCP 一覧は要求件数を超えず、Outlook は最大 50 件、OneDrive は最大 100 件です。内部フォルダー集約の 1,000 件上限は別に適用します。MCP リクエスト本文は 4 MiB、各ツール結果の JSON 表現は 128 KiB までです。
 
-Every operation has a closed argument schema. IDs are `1..2048` characters and
-reject control characters, whitespace, NEL `U+0085`, BOM `U+FEFF`, exact `.`,
-and exact `..`. Each ID path segment is encoded with `uriComponent`; caller `%`
-characters are encoded again and never become structural path separators.
+PDF / DOCX / XLSX のみを範囲指定で読み、OCR は行いません。OOXML の展開バイト数・XML 深さ等のガードを維持します。PDF の構造解析は PDF.js に任せ、手書きの文法許可リストや「復号ストリーム 16 MiB 上限」は使いません。PDF.js の内部割り当ては raw / ページ / 出力上限で制限できず、同期処理をタイマーで中断できません。Cloudflare の CPU・メモリ制約の確認が必要です。全上限は [解析ガイド](docs/attachments.md#resource-limits) に記載します。
 
-Queries are trimmed, nonempty, and at most 512 UTF-16 code units. Date filters
-must be ISO datetime-like strings. MCP list outputs are bounded to the requested
-limit and never exceed 50 Outlook items or 100 OneDrive items. The internal
-folder aggregation window is separately bounded to 1,000 metadata records.
+メール・ファイル名・抽出内容は信頼できない外部データです。出典を保持し、内容の指示を実行したり、ユーザー承認とみなしたりしません。
 
-All returned message text, attachment content, and OneDrive extracted content is
-untrusted external content. The MCP server must preserve provenance and never
-execute instructions found in the content.
+## 9. 下書き書き込み
 
-## 9. Privacy and logging
+詳細契約は [下書きガイド](docs/drafts.md) に従います。3 ツールとも write で非冪等、`readOnlyHint: false` / `idempotentHint: false` です。MCP ホストがユーザーの明示的承認を得る必要があります。注釈だけで承認は実施されません。
 
-The Worker logs only:
+固定の `/me/messages` 作成・返信・添付操作のみを許可し、送信、削除、汎用 HTTP、POST 自動再試行は提供しません。下書き添付は一致する ID と `isDraft: true` を取得で確認してから 1 回だけアップロードします。同時編集・送信とのトランザクションではありません。
+
+アップロード成功には、有効な添付 ID、要求した名前、検証済み canonical base64 と完全一致する返却 `contentBytes` が必要です。Graph `size` は独立した非負 Int32 メタデータであり、実ファイル長とみなしません。返す `size` は検証済み実バイト数（1 byte〜2 MiB）で、Worker も入力サイズとの一致を確認します。返却バイト列の欠落・不一致は `DRAFT_WRITE_AMBIGUOUS` として停止し、再送や代替取得をしません。
+
+タイムアウト、接続断、不正な成功応答でも、下書き・添付が既に保存されている可能性があります。再試行前に Outlook を確認します。`requestId` は相関用で、冪等性キーではありません。
+
+## 10. プライバシーと検証範囲
+
+Worker の通信ログは次だけです。
 
 ```ts
 { type: 'power_automate_request', requestId, operation, durationMs, status, success }
 ```
 
-Forbidden in logs and MCP outputs unless explicitly part of a requested bounded
-read result: Power Automate URLs, gateway keys, queries, subjects, message IDs,
-file IDs, body text, connector raw responses, nextLink URLs, bytes, and base64.
+URL、キー、検索語、件名、宛先、ID、本文、ファイル名、バイト列、base64、nextLink をログに出しません。MCP 出力には、依頼された有限の読み取り結果や下書き結果に必要な項目だけを含め、生コネクタ応答や通信資格情報を含めません。`success: true` は通信 envelope の検証成功であり、その後の内容正規化成功とは別です。
 
-Power Automate data-bearing actions use secure inputs/outputs where supported.
-This reduces run-history exposure but is not a claim about Microsoft retention.
+Power Automate は対応するアクションの安全な入出力設定で実行履歴の露出を減らします。Microsoft 側の保持・監査方針や、MCP ホスト側の保存を保証するものではありません。
 
-## 10. Testing and acceptance
-
-Offline tests validate the generated flow source, operation allowlist, fixed
-routes, native OneDrive operation IDs, secure-data settings, sanitization,
-argument bounds, and stale-generation detection. They do not import, save, or
-execute a live flow.
-
-Live flow runs, connector rebinding, deployment, and merge require separate
-authorization. The public flow source is not an importable package.
-
-
-## Draft-only writes
-
-See [`docs/drafts.md`](docs/drafts.md) for the authoritative draft argument,
-attachment-transfer, approval, and retry contract. All three tools are writes
-and non-idempotent. Only fixed `/me/messages` create/reply/attachment operations
-are allowed, with no sending, deletion, generic HTTP input, or automatic POST
-retry. Draft attachment success requires bounded returned `contentBytes` exactly
-matching the validated canonical request, plus a valid attachment ID and exact
-requested name. Graph metadata `size` is independently a nonnegative Int32, not
-an assertion of raw-file length. The draft tool's returned `size` is the verified
-raw-file byte count (1 byte through 2 MiB); the Worker retains its input-size equality check.
-Missing or mismatching bytes after upload fail closed as an ambiguous write,
-without retry. Read-only attachment size semantics and independent 4 MiB
-metadata/raw bounds are unchanged. The Worker remains stateless; only the
-requested Outlook draft persists.
+オフラインテストは合成データで、固定操作、経路、ネイティブ操作 ID、秘匿化、引数・サイズ制約、生成結果の一致を検証します。ライブフローの import / 保存 / 実行は行いません。既存の成功記録は過去の確認に限られ、大規模な実ファイル群の検証を意味しません。ライブ実行、コネクタ接続変更、デプロイ、マージには別途許可が必要です。公開 JSON は単独でインポートできるパッケージではありません。

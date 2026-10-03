@@ -1,48 +1,36 @@
-# Fixed PDF diagnostic codes
+# PDF の固定診断コード
 
-The PDF parser preserves the generic unsupported/malformed/encrypted/limit message
-and adds one fixed code. The code identifies the **first active raw-size guard or
-PDF.js runtime stage**, not every issue in the file. A code does not mean PDF.js
-cannot parse a different file with similar features. Diagnosing a particular file
-requires observing its own diagnostic result.
+[解析ガイド](attachments.md) · [読み取りツール](read-tools.md)
 
-`PdfParseError` provenance is kept in a private WeakMap. Public errors are rebuilt
-from the issued, runtime-allowlisted code; original messages/stacks and mutable
-error properties are never propagated. No document-derived values are part of a
-code. No new MCP tool, output schema, logging, data storage or resource access has
-been added. PDF structures are now delegated to PDF.js instead of a local
-whitelist, broadening the accepted subset. Existing selector errors are unchanged.
+PDF の解析エラーは、非対応・不正・暗号化・上限超過を示す共通メッセージと固定コードで表します。コードが示すのは**最初に働いた raw-size ガード、または PDF.js の処理段階**であり、ファイル内のすべての問題ではありません。同じ特徴を持つ別の PDF まで読めない、という意味でもありません。
 
-## Code reference
+Outlook の添付ツールでは、既存エラー応答の角括弧にコードを付けます。OneDrive も同じ PDF パーサーを使いますが、現在の OneDrive ツールの公開エラーは汎用メッセージで、このコードを付けません。
 
-| Code | First rule/stage |
+## コード一覧
+
+| コード | 最初のガード・段階 |
 | --- | --- |
-| `PDF_CREATE_DOCUMENT` | PDF.js loading task creation failed |
-| `PDF_EXTRACTION` | PDF.js inspection or text extraction failed |
-| `PDF_INITIALIZATION` | PDF.js module initialization failed |
-| `PDF_LOAD` | PDF.js document load failed |
-| `PDF_PAGE_LIMIT` | Page count exceeded |
-| `PDF_PASSWORD` | PDF.js reported an encrypted or password-protected document |
-| `PDF_RAW_SIZE` | Empty PDF or raw byte limit exceeded |
-| `PDF_TEXT_CHUNK` | PDF.js returned an invalid text chunk |
-| `PDF_TIMEOUT` | PDF parse or extraction wall-time timeout |
-| `PDF_UNKNOWN` | Unrecognized PDF diagnostic |
+| `PDF_CREATE_DOCUMENT` | PDF.js loading task の作成失敗 |
+| `PDF_EXTRACTION` | 構造確認またはテキスト抽出の失敗 |
+| `PDF_INITIALIZATION` | PDF.js モジュール初期化の失敗 |
+| `PDF_LOAD` | 文書の読み込み失敗 |
+| `PDF_PAGE_LIMIT` | ページ数上限超過 |
+| `PDF_PASSWORD` | PDF.js が暗号化・パスワード保護として報告 |
+| `PDF_RAW_SIZE` | 空 PDF または実バイト数上限超過 |
+| `PDF_TEXT_CHUNK` | PDF.js のテキスト chunk が不正 |
+| `PDF_TIMEOUT` | PDF の解析・抽出タイマーによるタイムアウト |
+| `PDF_UNKNOWN` | 未知の PDF 診断 |
 
-`PDF_PASSWORD` is used only when PDF.js exposes its standardized password error
-name. Other encrypted or malformed documents may surface as `PDF_LOAD` if PDF.js
-cannot classify them more specifically without exposing document-derived values.
+`PDF_PASSWORD` は PDF.js が標準のパスワードエラー名を返した場合だけです。内容を漏らさず詳しく分類できない暗号化・不正文書は `PDF_LOAD` 等になる場合があります。
 
-## Operational use after separately authorized publication
+## 秘匿化のしくみ
 
-Retry the existing `outlook_inspect_attachment` on the same message/attachment IDs.
-Read the bracketed fixed code in the existing error response. If inspection passes,
-use the existing bounded read tool to test extraction. Keep IDs and content private.
-No original document bytes need to be exported for this first-stage diagnosis.
+`PdfParseError` のコードは非公開の WeakMap で保持し、実行時の許可リストにある値から公開エラーを組み直します。元の例外文・stack、後から変更されたエラープロパティ、文書に由来する値は伝えません。新しい診断ツール・ログ・保存先・リソースアクセスはありません。既存の範囲指定エラーも変更しません。
 
-The handwritten PDF grammar/preflight checker has been removed. Object streams,
-xref streams, JPEG image streams and other PDF structures are now delegated to the
-existing unpdf/PDF.js parser with external resource access and rendering disabled.
-Do not interpret the shorter diagnostic list as complete memory isolation: raw,
-page, selection and output caps remain, but PDF.js internal allocation is governed
-by the runtime and Cloudflare platform limits. Deployment and live verification
-remain separate from local testing and are not implied by this patch.
+## 運用時の確認
+
+公開と実データへのアクセスを別途許可された運用では、同じ `messageId` / `attachmentId` で `outlook_inspect_attachment` を呼び、既存応答の固定コードを確認します。inspect が通れば、既存の read ツールで小さな範囲の抽出を確認します。最初の診断のために元文書のバイト列を外部へ持ち出す必要はありません。ID と内容は非公開にしてください。
+
+手書きの PDF 文法・構造許可リストは使いません。object stream、xref stream、JPEG image stream 等は `unpdf` / PDF.js に任せ、外部リソースアクセスとレンダリングは無効にします。
+
+**診断の種類が少ないことは、完全なメモリ隔離を意味しません。** raw / ページ / 選択 / 出力の上限はあっても PDF.js の内部割り当ては制限できず、10 秒タイマーは同期処理を強制中断できません。[CPU・メモリ制約](attachments.md#resource-limits)を確認してください。ローカルテストと、デプロイ・ライブ検証は別の作業です。

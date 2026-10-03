@@ -1,127 +1,73 @@
-# Outlook draft tools
+# Outlook の下書きツール
 
-This extension writes drafts in the signed-in mailbox. It does not send email,
-delete messages, expose arbitrary Graph requests, or add mailbox impersonation.
-The existing read tools retain their read-only annotations. The three draft
-tools advertise `readOnlyHint: false` and `idempotentHint: false`.
+[README](../README.md) · [正式な仕様](../SPEC.md) · [読み取りの添付サイズ](attachments.md)
 
-## Approval and access
+接続所有者のメールボックスに下書きを保存します。メール送信・削除、任意 Graph リクエスト、他ユーザーへのなりすましは提供しません。3 ツールの注釈は `readOnlyHint: false`、`idempotentHint: false` で、既存の読み取りツールは読み取り専用のままです。
 
-The MCP host must obtain the user’s approval before saving a draft or uploading
-an attachment. Tool annotations are capability hints, not an approval system.
-Approval to create a draft does not authorize sending it. Review and send in
-Outlook using the user’s normal workflow.
+## 承認と権限
 
-The fixed Graph operations require delegated `Mail.ReadWrite`, as documented by
-Microsoft. Existing Office 365 Outlook connector consent and tenant policy may
-or may not permit them. Verify the existing connection during an authorized
-rollout; do not silently add permissions, reauthenticate, or create a connector.
-No `Mail.Send` operation is introduced by this implementation.
+**下書き保存や添付アップロードの前に、MCP ホストがユーザーの明示的な承認を得る必要があります。** ツール注釈は機能のヒントであって承認システムではありません。作成の承認は送信の承認ではなく、確認・送信は Outlook の通常の操作で行います。
 
-## Workflow
+Microsoft の API 仕様では、これらの固定操作に委任された `Mail.ReadWrite` が必要です。既存 Office 365 Outlook 接続の同意やテナントポリシーが許可するとは限りません。許可された導入時に既存接続を確認し、無断で権限追加・再認証・コネクタ作成をしないでください。実装は `Mail.Send` を使う送信操作を追加しません。
 
-1. Call `outlook_create_draft` with `to`, optional `cc` and `bcc` arrays, `subject`,
-   and plain-text `body`. The result identifies the saved draft
-2. Or call `outlook_create_reply_draft` with an existing `messageId` and plain-text
-   `body`. Microsoft creates a sender-reply draft; this is not reply-all. Outlook
-   chooses the original message’s applicable reply recipient
-3. If needed, call `outlook_add_draft_attachment` for the returned `draftId`, with
-   a safe filename, MIME content type, and canonical base64 `contentBytes`
-4. Review the draft and its attachments in Outlook before sending
+## 操作の順序
 
-Attachment creation is deliberately a separate operation. If it fails, the
-previously created draft still exists. The attachment flow first reads the target
-and requires its matching ID and `isDraft: true`; it does not attach to an
-already-sent message. This check is not a transaction with concurrent Outlook
-edits or sending. Avoid modifying/sending the same draft during an upload.
+1. `outlook_create_draft` に `to`、任意の `cc` / `bcc` 配列、`subject`、プレーンテキストの `body` を渡します。成功すると `draftId` と `isDraft: true` が返ります。
+2. 返信なら `outlook_create_reply_draft` に元の `messageId` とプレーンテキストの `body` を渡します。これは元メールへの返信下書きで、全員への返信ではありません。返信先は Graph の `createReply` に委ねます。元メールの `replyTo` が送信者と異なる場合があるため、保存された下書きの宛先を Outlook で確認してください。
+3. 必要なら、返された `draftId` と `name`、`contentType`、canonical base64 の `contentBytes` で `outlook_add_draft_attachment` を呼びます。
+4. Outlook で本文・宛先・添付を確認します。送信はこのサーバーの機能外です。
 
-## Bounds and file transfer
+添付追加は別操作なので、失敗しても先に保存した下書きは残ります。フローは対象の ID 一致と `isDraft: true` を読み取りで確認してから添付を追加し、送信済みメールには追加しません。ただし、事前確認と同時編集・送信はトランザクションではありません。アップロード中に同じ下書きを編集・送信しないでください。
 
-- At most 50 recipients total across `to`, `cc`, and `bcc`
-- Subject at most 512 characters; plain-text body at most 20,000 characters
-- One attachment per call, nonempty, at most 2 MiB decoded bytes
-- Filenames at most 255 characters, without paths or control characters
-- Canonical base64 only; no data URLs, upload URLs, remote fetches, upload
-  sessions, cloud-file pointers, or arbitrary paths
-- Responses contain bounded identifiers, name, and verified **raw-file** `size`
-  in bytes (1 byte through 2 MiB), never attachment bytes/base64 or raw Graph objects.
-  This draft-upload `size` is not Microsoft Graph attachment metadata size
+## 入力の上限とファイルの受け渡し
 
-A chat attachment is not automatically readable by this MCP server. The host
-must first materialize the user-approved file through its supported file API,
-read the exact bytes locally, verify size, and base64-encode those bytes for the
-typed attachment tool. Do not substitute a chat download URL, a local path, or a
-Library ID for `contentBytes`. A host without that materialization capability
-must ask the user to attach the file in Outlook. Large base64 tool arguments may
-also exceed a host’s own tool-call limit even below the server’s limit.
+| 入力 | 制約 |
+| --- | --- |
+| `to` / `cc` / `bcc` | 合計最大 50 宛先。新規下書きの `to` は 1 件以上 |
+| `subject` / `body` | 最大 512 / 20,000 UTF-16 コード単位。本文はプレーンテキスト |
+| 添付 | 1 回につき 1 ファイル、実バイト数 1 byte〜2 MiB |
+| `name` | 1〜255 文字。パス区切り・制御文字なし |
+| `contentType` | 最大 127 文字の単純な MIME 型。パラメーターなし |
+| `contentBytes` | 厳密な canonical base64。data URL、remote URL、upload session、クラウド参照、ローカルパスは不可 |
 
-The Worker and flow keep data request-local; the requested saved draft and its
-attachments persist only in the user’s mailbox. The flow secures data-bearing
-run-history inputs/outputs and does not add storage or caches.
+**チャットにアップロードしたファイルを、この MCP サーバーが自動で読めるわけではありません。** ホストは、自身のファイル API でユーザー承認済みのファイルを実体化し、正確なバイト列を取得してサイズを確認し、そのバイト列を base64 化して渡す必要があります。チャットのダウンロード URL、ローカルパス、Library ID を `contentBytes` の代わりに使えません。
 
-## Attachment verification and size semantics
+ホストに実体化機能がなければ、ユーザーに Outlook で添付してもらってください。サーバーの 2 MiB 上限内でも、大きな base64 引数がホスト側のツール呼び出し上限を超える場合があります。
 
-Microsoft's [fileAttachment resource](https://learn.microsoft.com/en-us/graph/api/resources/fileattachment?view=graph-rest-1.0)
-defines `size` as Int32 attachment size in bytes and `contentBytes` as base64 file
-contents; it does not promise metadata `size` equals decoded file length. The
-[attachment POST documentation](https://learn.microsoft.com/en-us/graph/api/message-post-attachments?view=graph-rest-1.0)
-documents a 201 response with an attachment object and includes `contentBytes`
-in its file-attachment example.
+成功応答は有限の ID、名前、検証済みの**実ファイル** `size` だけで、バイト列・base64・生 Graph オブジェクトは含めません。Worker とフローはデータをリクエスト内だけで扱い、依頼された下書きと添付は Outlook に残ります。実行履歴の露出軽減は、Microsoft 側の非保持の保証ではありません。
 
-After the strict draft ID/`isDraft` preflight and a single upload, the flow:
+## 添付検証と `size` の意味
 
-1. Validates the returned attachment ID and exact requested name, and bounds
-   Graph metadata `size` to a nonnegative Int32 (`0..2147483647`), not 2 MiB
-2. Requires returned `contentBytes` to be a bounded string with equal numeric
-   string length and case-sensitive `contains(returnedContentBytes, requestedContentBytes)`.
-   Microsoft's [function reference](https://learn.microsoft.com/en-us/azure/logic-apps/expression-functions-reference#contains)
-   documents `contains()` as case-sensitive; this full-payload comparison does
-   not rely on `equals()` string case behavior. The request is canonical and
-   nonempty, so this proves exact raw-file identity and its bound of at most
-   2 MiB without decoding bytes in the flow, estimating metadata overhead, or
-   returning bytes
-3. Projects the validated request's raw-file byte count as response `size`.
-   The Worker independently checks this against its input and retains the
-   existing 2 MiB raw output bound
+Microsoft の [fileAttachment](https://learn.microsoft.com/en-us/graph/api/resources/fileattachment?view=graph-rest-1.0) は `size` を Int32 の添付サイズ、`contentBytes` を base64 の内容と定義していますが、`size` と復号後の実ファイル長が同じとは保証しません。[添付 POST](https://learn.microsoft.com/en-us/graph/api/message-post-attachments?view=graph-rest-1.0) の 201 応答例には `contentBytes` が含まれています。
 
-For example, synthetic raw content of 889 bytes with Graph metadata size 1223
-returns `size: 889`; exactly 2 MiB raw content can succeed even when metadata
-size exceeds 2 MiB. There is no overhead formula or fixed delta. Missing,
-malformed, oversized, noncanonical, or mismatching returned content fails closed
-as `DRAFT_WRITE_AMBIGUOUS`, without another upload or a fallback read. A connector
-that omits the documented bytes will therefore require manual inspection; this
-patch does not claim that every tenant's connector returns them. Such failures
-may occur **after** an attachment has been saved.
+下書きの確認と 1 回のアップロード後、フローは次を検証します。
 
-Read-only attachment list/inspect/read outputs retain **Graph metadata size**;
-inspect/read metadata size and decoded bytes remain independently bounded to 4 MiB.
-Their size semantics are not changed by draft-upload verification; see
-[`attachments.md`](attachments.md).
+1. 有効な返却添付 ID と要求した名前。Graph メタデータの `size` は非負 Int32（`0..2147483647`）に制限し、2 MiB の実ファイル上限と混同しません。
+2. 返却 `contentBytes` が有限の文字列で、要求と数値としての文字列長が等しく、`contains(returnedContentBytes, requestedContentBytes)` が成立すること。[Microsoft の関数仕様](https://learn.microsoft.com/en-us/azure/logic-apps/expression-functions-reference#contains)では `contains()` は大文字・小文字を区別します。空でない canonical な要求と同じ長さのため、全内容の一致と最大 2 MiB の実バイト制約を確認できます。`equals()` の文字列比較の大文字・小文字挙動には依存しません。
+3. 検証済みの要求の実バイト数を応答 `size` にします。Worker も入力との一致と実バイト上限を検証します。
 
-## Failure and retry behavior
+メタデータの overhead を推測したり、フローで復号したり、内容を MCP に返したりしません。合成データで raw 889 byte / Graph size 1223 なら返すのは `size: 889`。raw がちょうど 2 MiB でも Graph size がそれより大きいだけでは拒否しません。固定の差分式はありません。
 
-Draft/attachment POST actions have retries disabled. A timeout, connection loss,
-or malformed success response can occur after Microsoft has written the draft
-or attachment. Inspect Drafts and the target draft’s attachments before retrying;
-otherwise a retry can create duplicates. Request IDs are correlation values,
-not idempotency keys. The tool cannot guarantee exactly-once writes.
+返却バイト列が欠落、不正、過大、非 canonical、不一致なら **`DRAFT_WRITE_AMBIGUOUS`** で停止します。再アップロードや代替の読み取りは行いません。文書化されたバイト列を返さないコネクタでは手動確認が必要で、すべてのテナントが同じ応答を返すとは主張しません。**失敗を返した時点で既に添付が保存されている可能性があります。**
 
-Do not log recipients, subjects, bodies, file names, IDs, or attachment bytes.
-Only the existing bounded request telemetry fields are logged. Raw connector
-errors are never returned to the MCP caller.
+読み取り専用の一覧・inspect・read は Graph メタデータの `size` を保持し、inspect / read ではメタデータと実バイト数を各 4 MiB まで独立に検証します。下書きアップロードのサイズ意味論はそれらを変更しません。[添付ガイド](attachments.md)を参照してください。
 
-## Fixed Microsoft operations
+## 失敗と再試行
 
-- [Create a message draft](https://learn.microsoft.com/en-us/graph/api/user-post-messages):
-  `POST /v1.0/me/messages`
-- [Create a reply draft](https://learn.microsoft.com/en-us/graph/api/message-createreply):
-  `POST /v1.0/me/messages/{encodedMessageId}/createReply`
-- [Add a small attachment](https://learn.microsoft.com/en-us/graph/api/message-post-attachments):
-  `POST /v1.0/me/messages/{encodedDraftId}/attachments`, only after a fixed
-  message lookup verifies the target is a draft
-- [Office 365 Outlook connector HTTP action](https://learn.microsoft.com/en-us/connectors/office365/#send-an-http-request)
-  explicitly supports the `/me/messages` resource family
+下書き・添付の POST アクションは再試行を無効にしています。Worker も自動再試行しません。タイムアウト、接続断、不正な成功応答は、Microsoft が保存を終えた後にも起こり得ます。
 
-The generated flow is review/update material, not evidence of successful live
-execution. Import, consent checks, deployment, and a live draft-write smoke test
-require separate authorization. Offline tests use synthetic mailbox data only.
+**不明な結果なら Outlook の下書きフォルダーと対象の添付を先に確認してください。むやみに再実行すると重複を作ります。** `requestId` は相関用であり、冪等性キーではありません。exactly-once の保証はありません。
+
+通信段階の失敗は `PowerAutomateAmbiguousWriteError`、成功データの不正は `DraftError` として、下書き確認の必要性を示します。フローには `DRAFT_PREFLIGHT_FAILED`、`INVALID_DRAFT_PREFLIGHT`、`DRAFT_NOT_VERIFIED` といったアップロード前の固定拒否もありますが、Worker は書き込み操作の非 2xx を保守的に曖昧な結果として扱います。
+
+宛先、件名、本文、ファイル名、ID、バイト列をログに出しません。既存の有限な通信ログ項目だけを使い、生コネクタエラーは返しません。
+
+## 固定の Microsoft 操作
+
+| 操作 | 固定経路 |
+| --- | --- |
+| [新規下書き](https://learn.microsoft.com/en-us/graph/api/user-post-messages) | `POST /v1.0/me/messages` |
+| [返信下書き](https://learn.microsoft.com/en-us/graph/api/message-createreply) | `POST /v1.0/me/messages/{encodedMessageId}/createReply` |
+| [小さな添付](https://learn.microsoft.com/en-us/graph/api/message-post-attachments) | `POST /v1.0/me/messages/{encodedDraftId}/attachments`。固定の事前取得で下書きを検証した場合のみ |
+
+[Office 365 Outlook の HTTP アクション](https://learn.microsoft.com/en-us/connectors/office365/#send-an-http-request)は `/me/messages` 系をサポートします。ただし、生成フローはレビュー・更新用の資料であり、ライブ成功の証拠ではありません。import、同意確認、デプロイ、実際の下書きスモークテストは別途許可が必要です。オフラインテストは合成メールデータだけを使います。

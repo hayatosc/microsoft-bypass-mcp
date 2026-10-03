@@ -74,7 +74,10 @@ power-automate/
 - TypeScript ESM-first: `strict`, `verbatimModuleSyntax`, no `any` / unsafe `as`.
 - zod v4 for validation. MCP SDK v2 (`@modelcontextprotocol/server`):
   `McpServer` + `registerTool` behind `createMcpHandler` (fresh server per request).
-- Docs and code comments in English.
+- Human-facing Markdown documentation is written in clear Japanese for open-source
+  onboarding; preserve machine identifiers, commands, and security meaning. Code
+  comments remain in English. Keep all safeguards and operational commands below
+  unchanged when localizing documentation.
 
 ## Flow-source safety
 

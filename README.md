@@ -1,119 +1,89 @@
 # microsoft-bypass-mcp
 
-Microsoftアカウントのテナント管理者がAIサービス(ChatGPT, Claudeなど)との連携を承認していないときに、Power Automate経由でバイパスして情報を取得できるリモートMCPサーバー。
+自分に利用権限のある Microsoft 365 のメールやファイルを、Power Automate 経由で MCP クライアントから読むための、個人運用向けリモート MCP サーバーです。Outlook の下書き保存にも対応しますが、**メールは送信しません**。
 
-The server exposes fixed Microsoft 365 reads and explicitly requested Outlook
-draft writes. It never sends email and is not a generic Microsoft Graph proxy.
+組織の承認やアクセス制御を回避するためのものではありません。大学・組織の規程、外部 AI へのデータ提供の許可、Microsoft 365 / Power Automate のライセンス、テナントの DLP ポリシーやコネクタ制限を確認してから利用してください。Microsoft アカウントがあるだけで使えるとは限りません。
 
-## Architecture
+## しくみ
 
-```
-MCP Client
+```text
+MCP クライアント
     ↓ MCP over Streamable HTTP (/mcp)
-Remote MCP Server — Cloudflare Workers + Hono (Cloudflare Access OAuth)
-    ↓ HTTP POST { operation, requestId, args }
-Power Automate — operation allowlist → fixed read/draft connector actions
-    ↓
-Microsoft 365 connectors
+Cloudflare Access（外部 OAuth 認証・アクセス制御）
+    ↓ Access JWT を Worker 内でも検証
+Cloudflare Workers + Hono（リクエストごとに処理）
+    ↓ HTTP POST { operation, requestId, args } + X-MCP-Gateway-Key
+Power Automate（固定の操作だけを許可）
+    ↓ Outlook の固定 Graph 操作 / OneDrive for Business のネイティブ操作
+接続所有者の Microsoft 365
 ```
 
-## Tools
+Worker は Microsoft Graph に直接接続しません。任意の URL・HTTP メソッド・Graph クエリを渡す汎用プロキシではなく、**16 ツール（読み取り 13、下書き書き込み 3）を 14 の固定操作に対応付けます**。
 
-| Tool | Input summary | Output summary |
-| --- | --- | --- |
-| `outlook_list_messages` | mailbox/folder, limit, cursor, controlled filters | Message summaries + bounded cursor |
-| `outlook_search_messages` | query, mailbox/folder, limit | First search page |
-| `outlook_get_message` | message ID | Full selected message |
-| `outlook_list_mail_folders` | limit | Folder summaries + incomplete flag |
-| `outlook_get_conversation` | conversation ID, limit, cursor | Exact conversation page including sent mail when accessible |
-| `outlook_list_attachments` | message ID, limit, offset | Attachment metadata + next offset |
-| `outlook_inspect_attachment` | message ID, attachment ID | PDF/DOCX/XLSX structure |
-| `outlook_read_attachment` | message ID, attachment ID, selection | Bounded content with source provenance |
-| `outlook_create_draft` | recipients, subject, plain-text body | Saved draft ID |
-| `outlook_create_reply_draft` | message ID, plain-text body | Saved sender-reply draft ID |
-| `outlook_add_draft_attachment` | draft ID, name, content type, base64 | Added small attachment metadata |
-| `onedrive_search_files` | query, limit | Native OneDrive owned-file metadata |
-| `onedrive_list_folder` | optional folder ID, limit, cursor | Bounded native folder aggregation and metadata pages |
-| `onedrive_get_metadata` | file ID | Projected native metadata |
-| `onedrive_inspect_file` | file ID | PDF/DOCX/XLSX structure |
-| `onedrive_read_file` | file ID, selection | Bounded content with source provenance |
+## できること
 
-All text and extracted file content is untrusted external content.
+| ツール | 用途 |
+| --- | --- |
+| `outlook_list_messages` | 受信・送信・全体・指定フォルダーのメール概要。限定フィルターとカーソル対応 |
+| `outlook_search_messages` | メール検索の先頭ページのみ |
+| `outlook_get_message` | 指定メールの本文・詳細 |
+| `outlook_list_mail_folders` | メールのルートフォルダー一覧。取得漏れの可能性を明示 |
+| `outlook_get_conversation` | 指定会話のメール。アクセス可能な送信済みメールも対象 |
+| `outlook_list_attachments` | 添付ファイルのメタデータ一覧 |
+| `outlook_inspect_attachment` | PDF / DOCX / XLSX 添付の構造確認 |
+| `outlook_read_attachment` | 添付の指定ページ・文章範囲・セル範囲を読む |
+| `onedrive_search_files` | 所有する OneDrive ファイルの検索。最大 100 件、検索カーソルなし |
+| `onedrive_list_folder` | ルートまたは指定フォルダーの一覧。指定フォルダーは最大 1,000 件の集約範囲内でページング |
+| `onedrive_get_metadata` | ファイル・フォルダーのメタデータ |
+| `onedrive_inspect_file` | 所有する PDF / DOCX / XLSX の構造確認 |
+| `onedrive_read_file` | 所有ファイルの指定範囲を読む |
+| `outlook_create_draft` | 明示的な承認を受けて新規下書きを保存 |
+| `outlook_create_reply_draft` | 元メールへの返信下書きを保存。全員への返信ではない |
+| `outlook_add_draft_attachment` | 下書きであることを確認し、小さな添付を追加 |
 
-Named-folder listing uses verified native pagination up to a bounded 1,000-item
-window, with explicit incompleteness at the cap. OneDrive search still has its
-native 100-result ceiling and no supported continuation. Draft tools never send
-mail; attaching a file requires the host to materialize approved bytes first.
+ファイル読み取りは最大 4 MiB、下書きへの添付は 1 回 2 MiB までです。OCR、画像抽出、共有ライブラリやショートカットの追跡には対応しません。OneDrive の一覧カーソルは毎回取得し直す有限の集約結果を分割するもので、無制限の列挙や安定したスナップショットではありません。
 
-## Power Automate source
+## 導入の流れ
 
-The canonical flow source is generated at
-`power-automate/microsoft-bypass-flow/definition.json` from the immutable
-sanitized fixture plus authored fixed-operation extensions:
+必要なのは Bun **1.3.14**、Python 3、Cloudflare アカウント、許可された Microsoft 365 / Power Automate 環境、およびリモート MCP と選択した外部 OAuth 認証に対応するクライアントです。
 
-```sh
-python3 scripts/build_attachment_flow.py
-python3 scripts/build_attachment_flow.py --check
-bun run test:flow
-```
+1. **組織の許可・契約・接続権限を確認する。** 読み取りだけでなく下書きの書き込みも対象です。
+2. **このチェックアウトで依存関係とオフライン検証を用意する。**
+   ```sh
+   bun install --frozen-lockfile
+   python3 scripts/build_attachment_flow.py --check
+   bun run test
+   bun run test:flow
+   ```
+3. **許可された既存 Power Automate フローを手動更新する。** [フローの手順](power-automate/microsoft-bypass-flow/README.md)に従い、接続、`McpGatewayKey`、操作分岐を設定します。公開 `definition.json` はレビュー用ソースで、単独でインポートできるパッケージではありません。既存フローがない場合の初期構築は同梱していません。
+4. **Worker の 4 つのバインディングを設定する。** `POWER_AUTOMATE_URL`、`POWER_AUTOMATE_GATEWAY_KEY`、`TEAM_DOMAIN`、`POLICY_AUD`。URL とキーを公開しないでください。
+5. **Cloudflare Access と外部 OAuth / クライアント側の接続条件を整える。** Access アプリ・ポリシーや OAuth の登録・連携は別途必要です。このリポジトリはそれらの自動構築を提供しません。
+6. **各種チェックとレビューを終え、別途許可された公開・接続確認へ進む。** 本番で Access の前段保護と Worker 内の JWT 検証を両方有効にします。
 
-The flow source extends the existing flow in place. It preserves the same HTTP
-trigger, gateway-key guard, operation switch, and Outlook connection convention.
-It adds controlled Outlook scope/filter/pagination/folder/conversation reads,
-keeps the attachment branches and safety gates, and adds native OneDrive for
-Business operation branches and fixed draft-only Outlook writes.
+設定例、ローカル起動、全チェック、公開前の確認事項は **[セットアップガイド](docs/setup.md)** にまとめています。`bun run dev` は実際のフローを呼べるため、オフラインテストとは区別してください。
 
-The public JSON is source for review/manual update, not a deployable package.
-OneDrive connector binding and the official `FindFiles.findMode` machine value
-must be verified during a separately authorized manual import/update. No live
-flow run, connector creation, or deployment is performed by this repository.
+## 安全に使うために
 
-See:
+- メール本文、ファイル名、抽出した文章・セルは**信頼できない外部データ**です。内容に書かれた指示を実行したり、操作の承認とみなしたりしないでください。
+- Worker はメール・ファイルを DB / KV / R2 / キャッシュへ保存しません。明示的に保存した下書き・添付は Outlook に残ります。MCP クライアントや Microsoft 側の保持方針は別途確認が必要です。
+- 読み取り結果に生バイト列や base64、ダウンロード URL は返しません。添付を下書きへ渡すには、ホストが承認済みの実バイト列を用意する必要があります。
+- 下書き書き込みは**非冪等**です。タイムアウトなどで結果が不明な場合は、Outlook の下書きと添付を確認してから判断し、むやみに再実行しないでください。
+- フロー URL、キー、接続情報を Git・ログ・スクリーンショットに含めないでください。Power Automate の安全な入出力設定は実行履歴の露出を減らしますが、サービス側の非保持を保証しません。
+- PDF は PDF.js で解析します。ページ数や出力の上限だけでは内部メモリ使用量を制限できず、本番の CPU・メモリ制約の確認が必要です。
 
-- `SPEC.md` for the authoritative contract.
-- `docs/read-tools.md` for read-tool behavior and limits.
-- `docs/drafts.md` for draft approval, attachment transfer, limits, and retry safety.
-- `docs/attachments.md` for attachment/file parser safety limits.
-- `power-automate/microsoft-bypass-flow/README.md` for flow provenance and manual update notes.
+## ドキュメント
 
-## Requirements
+- [SPEC.md](SPEC.md) — 正式な仕様、固定操作、通信・セキュリティ境界
+- [セットアップ](docs/setup.md) — 手動作業、認証、4 バインディング、Bun / Vitest の開発手順
+- [読み取りツール](docs/read-tools.md) — 入力、ページング、不完全な結果、送信者の正規化
+- [下書きツール](docs/drafts.md) — 承認、添付の受け渡し、サイズ検証、再試行の注意
+- [添付・ファイル解析](docs/attachments.md) — PDF / DOCX / XLSX の使い方と制限
+- [PDF 診断コード](docs/pdf-diagnostics.md) — 内容を漏らさない固定エラーの見方
+- [Power Automate フロー](power-automate/microsoft-bypass-flow/README.md) — 正規ソースの由来と既存フローの更新
+- [テスト用フィクスチャ](scripts/fixtures/README.md) — 変更しない履歴資料
 
-- Microsoftアカウント
-- [Bun](https://bun.sh) 1.3.14
-- Cloudflareアカウント
+ローカルテストは合成データとモックを使います。成功しても Microsoft 側の実行、クライアント接続、実ファイルの大規模検証が済んだことにはなりません。
 
-## Configuration
+## ライセンス
 
-`.dev.vars.example` に従ってPower Automate側のURLを参照:
-
-```sh
-POWER_AUTOMATE_URL=https://prod-xxx.logic.azure.com/workflows/xxx/triggers/manual/paths/invoke
-POWER_AUTOMATE_GATEWAY_KEY=<gateway key>
-```
-
-For production, set secrets/vars with Wrangler. Never commit the trigger URL or
-key.
-
-## Development
-
-```sh
-bun install
-bun run dev
-```
-
-## Quality checks
-
-```sh
-bun run typecheck
-bun run lint
-bun run lint:types
-bun run format:check
-bun run test
-bun run test:flow
-```
-
-## Deploy
-
-```sh
-bun run deploy
-```
+このリポジトリのライセンスはまだ指定されていません。再利用の条件はメンテナーに確認してください。
