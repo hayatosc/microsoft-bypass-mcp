@@ -29,7 +29,7 @@ BASELINE_SOURCE = json.loads(BASELINE.read_text(encoding="utf-8"))
 ATTACHMENT_CASES = {name: SOURCE["actions"]["スイッチ"]["cases"][name] for name in ATTACHMENT_OPERATIONS}
 BASELINE_SHA256 = "688fd5a8a1e83288710e965f9597c33b99a7ff702c89c18ca571e67eb3f075d8"
 REQUEST_ID = "12345678-1234-4234-8234-123456789abc"
-WORKER_ID_PATTERN = r"^(?!\.{1,2}$)[^\s\u0000-\u001f\u007f]+$(?![\s\S])"
+WORKER_ID_PATTERN = r"^(?!\.{1,2}$)[^\s\u0000-\u001f\u007f\u0085]+$(?![\s\S])"
 
 
 def string_length(value):

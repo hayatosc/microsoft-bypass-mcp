@@ -26,7 +26,7 @@ export class OneDriveError extends Error {
 }
 const nativeMetadataSchema = z
   .object({
-    Id: z.string().min(1).max(2048),
+    Id: oneDriveFileIdSchema,
     Name: z.string().min(1).max(512),
     NameNoExt: z.string().optional(),
     DisplayName: z.string().optional(),
@@ -48,7 +48,6 @@ const nativePageSchema = z
   .passthrough()
 const nativeListSchema = z.union([z.array(nativeMetadataSchema).max(100), nativePageSchema])
 const folderMetadataSchema = nativeMetadataSchema.extend({
-  Id: oneDriveFileIdSchema,
   LastModified: z.string().max(2048).nullable().optional(),
   ETag: z.string().max(2048).nullable().optional(),
 })

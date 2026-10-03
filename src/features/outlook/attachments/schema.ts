@@ -7,9 +7,9 @@ export const attachmentIdSchema = z
   .string()
   .min(1)
   .max(2048)
-  // Security boundary: control characters are deliberately excluded from Graph IDs.
+  // Security boundary: control characters, including NEL U+0085, are excluded from Graph IDs.
   // oxlint-disable-next-line no-control-regex
-  .regex(/^(?!\.{1,2}$)[^\s\u0000-\u001f\u007f]+$(?![\s\S])/)
+  .regex(/^(?!\.{1,2}$)[^\s\u0000-\u001f\u007f\u0085]+$(?![\s\S])/)
 export const attachmentTargetSchema = z.object({
   messageId: attachmentIdSchema,
   attachmentId: attachmentIdSchema,

@@ -480,6 +480,27 @@ class ExpandedExecutionContracts(unittest.TestCase):
             self.assert_error(flow, status, calls=1)
             self.assertEqual(flow.call_operations, ["GetFileMetadata"])
 
+    def test_content_requires_dot_suffix_for_each_supported_format(self):
+        pairs = (
+            ("pdf", "application/pdf"),
+            ("docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+            ("xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+        )
+        for extension, registered_media in pairs:
+            for media in (registered_media, "", "application/octet-stream"):
+                with self.subTest(extension=extension, media=media):
+                    flow = configured_flow("onedrive_get_content", responses=[
+                        native_metadata(Name=extension, MediaType=media),
+                    ])
+                    self.assert_error(flow, 415, calls=1, code="UNSUPPORTED_ONEDRIVE_FILE_TYPE")
+                    self.assertEqual(flow.call_operations, ["GetFileMetadata"])
+                    valid = configured_flow("onedrive_get_content", responses=[
+                        native_metadata(Name="sample." + extension, MediaType=media),
+                        binary(content_type=media),
+                    ])
+                    self.assertEqual(valid.run()["statusCode"], 200)
+                    self.assertEqual(valid.call_operations, ["GetFileMetadata", "GetFileContent"])
+
     def test_content_success_uses_native_id_and_sanitized_projection(self):
         flow = configured_flow("onedrive_get_content", {"fileId": "file/a?b#c"}, [native_metadata(Id="file/a?b#c", Path=CANARY), binary()])
         response = flow.run()
